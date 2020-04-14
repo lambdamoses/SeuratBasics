@@ -711,15 +711,17 @@ DESeq2DETest <- function(
 }
 
 # internal function to calculate AUC values
-#' @importFrom ROCR prediction performance
 #'
 DifferentialAUC <- function(x, y) {
-  prediction.use <- prediction(
+  if (!PackageCheck("ROCR", error = FALSE)) {
+    stop("Please install ROCR.")
+  }
+  prediction.use <- ROCR::prediction(
     predictions = c(x, y),
     labels = c(rep(x = 1, length(x = x)), rep(x = 0, length(x = y))),
     label.ordering = 0:1
   )
-  perf.use <- performance(prediction.obj = prediction.use, measure = "auc")
+  perf.use <- ROCR::performance(prediction.obj = prediction.use, measure = "auc")
   auc.use <- round(x = perf.use@y.values[[1]], digits = 3)
   return(auc.use)
 }
