@@ -153,104 +153,6 @@ CalculateBarcodeInflections <- function(
   return(object)
 }
 
-#' Convert a peak matrix to a gene activity matrix
-#'
-#' This function will take in a peak matrix and an annotation file (gtf) and collapse the peak
-#' matrix to a gene activity matrix. It makes the simplifying assumption that all counts in the gene
-#' body plus X kb up and or downstream should be attributed to that gene.
-#'
-#' @param peak.matrix Matrix of peak counts
-#' @param annotation.file Path to GTF annotation file
-#' @param seq.levels Which seqlevels to keep (corresponds to chromosomes usually)
-#' @param include.body Include the gene body?
-#' @param upstream Number of bases upstream to consider
-#' @param downstream Number of bases downstream to consider
-#' @param verbose Print progress/messages
-#'
-#' @importFrom future nbrOfWorkers
-#' @export
-#'
-CreateGeneActivityMatrix <- function(
-  peak.matrix,
-  annotation.file,
-  seq.levels = c(1:22, "X", "Y"),
-  include.body = TRUE,
-  upstream = 2000,
-  downstream = 0,
-  verbose = TRUE
-) {
-  if (!PackageCheck('GenomicRanges', error = FALSE)) {
-    stop("Please install GenomicRanges from Bioconductor.")
-  }
-  if (!PackageCheck('rtracklayer', error = FALSE)) {
-    stop("Please install rtracklayer from Bioconductor.")
-  }
-  # convert peak matrix to GRanges object
-  peak.df <- rownames(x = peak.matrix)
-  peak.df <- do.call(what = rbind, args = strsplit(x = gsub(peak.df, pattern = ":", replacement = "-"), split = "-"))
-  peak.df <- as.data.frame(x = peak.df)
-  colnames(x = peak.df) <- c("chromosome", 'start', 'end')
-  peaks.gr <- GenomicRanges::makeGRangesFromDataFrame(df = peak.df)
-
-  # if any peaks start at 0, change to 1
-  # otherwise GenomicRanges::distanceToNearest will not work
-  BiocGenerics::start(peaks.gr[BiocGenerics::start(peaks.gr) == 0, ]) <- 1
-
-  # get annotation file, select genes
-  gtf <- rtracklayer::import(con = annotation.file)
-  gtf <- GenomeInfoDb::keepSeqlevels(x = gtf, value = seq.levels, pruning.mode = 'coarse')
-
-  # change seqlevelsStyle if not the same
-  if (!any(GenomeInfoDb::seqlevelsStyle(x = gtf) == GenomeInfoDb::seqlevelsStyle(x = peaks.gr))) {
-    GenomeInfoDb::seqlevelsStyle(gtf) <- GenomeInfoDb::seqlevelsStyle(peaks.gr)
-  }
-  gtf.genes <- gtf[gtf$type == 'gene']
-
-  # Extend definition up/downstream
-  if (include.body) {
-    gtf.body_prom <- Extend(x = gtf.genes, upstream = upstream, downstream = downstream)
-  } else {
-    gtf.body_prom <- SummarizedExperiment::promoters(x = gtf.genes, upstream = upstream, downstream = downstream)
-  }
-  gene.distances <- GenomicRanges::distanceToNearest(x = peaks.gr, subject = gtf.body_prom)
-  keep.overlaps <- gene.distances[rtracklayer::mcols(x = gene.distances)$distance == 0]
-  peak.ids <- peaks.gr[S4Vectors::queryHits(x = keep.overlaps)]
-  gene.ids <- gtf.genes[S4Vectors::subjectHits(x = keep.overlaps)]
-
-  # Some GTF rows will not have gene_name attribute
-  # Replace it by gene_id attribute
-  gene.ids$gene_name[is.na(gene.ids$gene_name)] <- gene.ids$gene_id[is.na(gene.ids$gene_name)]
-
-  peak.ids$gene.name <- gene.ids$gene_name
-  peak.ids <- as.data.frame(x = peak.ids)
-  peak.ids$peak <- rownames(peak.matrix)[S4Vectors::queryHits(x = keep.overlaps)]
-  annotations <- peak.ids[, c('peak', 'gene.name')]
-  colnames(x = annotations) <- c('feature', 'new_feature')
-
-  # collapse into expression matrix
-  peak.matrix <- as(object = peak.matrix, Class = 'matrix')
-  all.features <- unique(x = annotations$new_feature)
-
-  if (nbrOfWorkers() > 1) {
-    mysapply <- future_sapply
-  } else {
-    mysapply <- ifelse(test = verbose, yes = pbsapply, no = sapply)
-  }
-  newmat <- mysapply(X = 1:length(x = all.features), FUN = function(x){
-    features.use <- annotations[annotations$new_feature == all.features[[x]], ]$feature
-    submat <- peak.matrix[features.use, ]
-    if (length(x = features.use) > 1) {
-      return(Matrix::colSums(x = submat))
-    } else {
-      return(submat)
-    }
-  })
-  newmat <- t(x = newmat)
-  rownames(x = newmat) <- all.features
-  colnames(x = newmat) <- colnames(x = peak.matrix)
-  return(as(object = newmat, Class = 'dgCMatrix'))
-}
-
 #' Demultiplex samples based on data from cell 'hashing'
 #'
 #' Assign sample-of-origin for each cell, annotate doublets.
@@ -275,9 +177,7 @@ CreateGeneActivityMatrix <- function(
 #'   \item{hash.ID}{Classification result where doublet IDs are collapsed}
 #' }
 #'
-#' @importFrom cluster clara
 #' @importFrom Matrix colSums
-#' @importFrom fitdistrplus fitdist
 #' @importFrom stats pnbinom kmeans
 #'
 #' @export
@@ -303,6 +203,9 @@ HTODemux <- function(
   if (!is.null(x = seed)) {
     set.seed(seed = seed)
   }
+  if (!PackageCheck("fitdistrplus", error = FALSE)) {
+    stop("Please install fitdistrplus.")
+  }
   #initial clustering
   assay <- assay %||% DefaultAssay(object = object)
   data <- GetAssayData(object = object, assay = assay)
@@ -326,7 +229,7 @@ HTODemux <- function(
     },
     'clara' = {
       #use fast k-medoid clustering
-      init.clusters <- clara(
+      init.clusters <- cluster::clara(
         x = t(x = GetAssayData(object = object, assay = assay)),
         k = ncenters,
         samples = nsamples
@@ -359,7 +262,7 @@ HTODemux <- function(
       object = object,
       idents = levels(x = Idents(object = object))[[which.min(x = average.expression[iter, ])]]
     )]
-    fit <- suppressWarnings(expr = fitdist(data = values.use, distr = "nbinom"))
+    fit <- suppressWarnings(expr = fitdistrplus::fitdist(data = values.use, distr = "nbinom"))
     cutoff <- as.numeric(x = quantile(x = fit, probs = positive.quantile)$quantiles[1])
     discrete[iter, names(x = which(x = values > cutoff))] <- 1
     if (verbose) {
@@ -1401,43 +1304,6 @@ SubsetByBarcodeInflections <- function(object) {
   return(object[, cbi.data$cells_pass])
 }
 
-#' Term frequency-inverse document frequency
-#'
-#' Normalize binary data per cell using the term frequency-inverse document frequency
-#' normalization method (TF-IDF).
-#' This is suitable for the normalization of binary ATAC peak datasets.
-#'
-#' @param data Matrix with the raw count data
-#' @param verbose Print progress
-#'
-#' @return Returns a matrix with the normalized data
-#'
-#' @importFrom Matrix colSums rowSums
-#'
-#' @export
-#'
-#' @examples
-#' mat <- matrix(data = rbinom(n = 25, size = 5, prob = 0.2), nrow = 5)
-#' mat_norm <- TF.IDF(data = mat)
-#'
-TF.IDF <- function(data, verbose = TRUE) {
-  if (is.data.frame(x = data)) {
-    data <- as.matrix(x = data)
-  }
-  if (!inherits(x = data, what = 'dgCMatrix')) {
-    data <- as(object = data, Class = "dgCMatrix")
-  }
-  if (verbose) {
-    message("Performing TF-IDF normalization")
-  }
-  npeaks <- colSums(x = data)
-  tf <- t(x = t(x = data) / npeaks)
-  idf <- ncol(x = data) / rowSums(x = data)
-  norm.data <- Diagonal(n = length(x = idf), x = idf) %*% tf
-  norm.data[which(x = is.na(x = norm.data))] <- 0
-  return(norm.data)
-}
-
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Methods for Seurat-defined generics
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1654,7 +1520,6 @@ FindVariableFeatures.Assay <- function(
   return(object)
 }
 
-#' @inheritParams FindVariableFeatures.Assay
 #' @param assay Assay to use
 #'
 #' @rdname FindVariableFeatures
@@ -1883,233 +1748,6 @@ NormalizeData.Seurat <- function(
   )
   object[[assay]] <- assay.data
   object <- LogSeuratCommand(object = object)
-  return(object)
-}
-
-#' @param k  The rank of the rank-k approximation. Set to NULL for automated choice of k.
-#' @param q  The number of additional power iterations in randomized SVD when
-#' computing rank k approximation. By default, q=10.
-#' @param quantile.prob The quantile probability to use when calculating threshold.
-#' By default, quantile.prob = 0.001.
-#' @param use.mkl Use the Intel MKL based implementation of SVD. Needs to be
-#' installed from https://github.com/KlugerLab/rpca-mkl. \strong{Note}: this requires
-#' the \href{https://github.com/satijalab/seurat-wrappers}{SeuratWrappers} implementation
-#' of \code{RunALRA}
-#' @param mkl.seed Only relevant if \code{use.mkl = TRUE}. Set the seed for the random
-#' generator for the Intel MKL implementation of SVD. Any number <0 will
-#' use the current timestamp. If \code{use.mkl = FALSE}, set the seed using
-#' \code{\link{set.seed}()} function as usual.
-#'
-#' @rdname RunALRA
-#' @export
-#'
-RunALRA.default <- function(
-  object,
-  k = NULL,
-  q = 10,
-  quantile.prob = 0.001,
-  use.mkl = FALSE,
-  mkl.seed = -1,
-  ...
-) {
-  CheckDots(...)
-  A.norm <- t(x = as.matrix(x = object))
-  message("Identifying non-zero values")
-  originally.nonzero <- A.norm > 0
-  message("Computing Randomized SVD")
-  if (use.mkl) {
-    warning(
-      "Using the Intel MKL-based implementation of SVD requires RunALRA from SeuratWrappers\n",
-      "For more details, see https://github.com/satijalab/seurat-wrappers\n",
-      "Continuing with standard SVD implementation",
-      call. = FALSE,
-      immediate. = TRUE
-    )
-  }
-  fastDecomp.noc <- rsvd(A = A.norm, k = k, q = q)
-  A.norm.rank.k <- fastDecomp.noc$u[, 1:k] %*%
-    diag(x = fastDecomp.noc$d[1:k]) %*%
-    t(x = fastDecomp.noc$v[,1:k])
-  message(sprintf("Find the %f quantile of each gene", quantile.prob))
-  A.norm.rank.k.mins <- abs(x = apply(
-    X = A.norm.rank.k,
-    MARGIN = 2,
-    FUN = function(x) {
-      return(quantile(x = x, probs = quantile.prob))
-    }
-  ))
-  message("Thresholding by the most negative value of each gene")
-  A.norm.rank.k.cor <- replace(
-    x = A.norm.rank.k,
-    list = A.norm.rank.k <= A.norm.rank.k.mins[col(A.norm.rank.k)],
-    values = 0
-  )
-  sd.nonzero <- function(x) {
-    return(sd(x[!x == 0]))
-  }
-  sigma.1 <- apply(X = A.norm.rank.k.cor, MARGIN = 2, FUN = sd.nonzero)
-  sigma.2 <- apply(X = A.norm, MARGIN = 2, FUN = sd.nonzero)
-  mu.1 <- colSums(x = A.norm.rank.k.cor) / colSums(x = !!A.norm.rank.k.cor)
-  mu.2 <- colSums(x = A.norm) / colSums(x = !!A.norm)
-  toscale <- !is.na(sigma.1) & !is.na(sigma.2) & !(sigma.1 == 0 & sigma.2 == 0) & !(sigma.1 == 0)
-  message(sprintf(fmt = "Scaling all except for %d columns", sum(!toscale)))
-  sigma.1.2 <- sigma.2 / sigma.1
-  toadd <- -1 * mu.1 * sigma.2 / sigma.1 + mu.2
-  A.norm.rank.k.temp <- A.norm.rank.k.cor[, toscale]
-  A.norm.rank.k.temp <- Sweep(
-    x = A.norm.rank.k.temp,
-    MARGIN = 2,
-    STATS = sigma.1.2[toscale],
-    FUN = "*"
-  )
-  A.norm.rank.k.temp <- Sweep(
-    x = A.norm.rank.k.temp,
-    MARGIN = 2,
-    STATS = toadd[toscale],
-    FUN = "+"
-  )
-  A.norm.rank.k.cor.sc <- A.norm.rank.k.cor
-  A.norm.rank.k.cor.sc[, toscale] <- A.norm.rank.k.temp
-  A.norm.rank.k.cor.sc[A.norm.rank.k.cor == 0] <- 0
-  lt0 <- A.norm.rank.k.cor.sc < 0
-  A.norm.rank.k.cor.sc[lt0] <- 0
-  message(sprintf(
-    fmt = "%.2f%% of the values became negative in the scaling process and were set to zero",
-    100 * sum(lt0) / prod(dim(x = A.norm))
-  ))
-  A.norm.rank.k.cor.sc[originally.nonzero & A.norm.rank.k.cor.sc == 0] <-
-    A.norm[originally.nonzero & A.norm.rank.k.cor.sc == 0]
-  colnames(x = A.norm.rank.k) <- colnames(x = A.norm.rank.k.cor.sc) <-
-    colnames(x = A.norm.rank.k.cor) <- colnames(x = A.norm)
-  original.nz <- sum(A.norm > 0) / prod(dim(x = A.norm))
-  completed.nz <- sum(A.norm.rank.k.cor.sc > 0) / prod(dim(x = A.norm))
-  message(sprintf(
-    fmt = "The matrix went from %.2f%% nonzero to %.2f%% nonzero",
-    100 * original.nz,
-    100 * completed.nz
-  ))
-  return(A.norm.rank.k.cor.sc)
-}
-
-#' @param assay Assay to use
-#' @param slot slot to use
-#' @param setDefaultAssay If TRUE, will set imputed results as default Assay
-#' @param genes.use genes to impute
-#' @param K Number of singular values to compute when choosing k. Must be less
-#' than the smallest dimension of the matrix. Default 100 or smallest dimension.
-#' @param thresh The threshold for ''significance'' when choosing k. Default 1e-10.
-#' @param noise.start Index for which all smaller singular values are considered noise.
-#' Default K - 20.
-#' @param q.k Number of additional power iterations when choosing k. Default 2.
-#' @param k.only If TRUE, only computes optimal k WITHOUT performing ALRA
-#'
-#' @importFrom rsvd rsvd
-#' @importFrom Matrix Matrix
-#' @importFrom stats sd setNames quantile
-#'
-#' @rdname RunALRA
-#' @export
-#' @method RunALRA Seurat
-#'
-RunALRA.Seurat <- function(
-  object,
-  k = NULL,
-  q = 10,
-  quantile.prob = 0.001,
-  use.mkl = FALSE,
-  mkl.seed=-1,
-  assay = NULL,
-  slot = "data",
-  setDefaultAssay = TRUE,
-  genes.use = NULL,
-  K = NULL,
-  thresh = 6,
-  noise.start = NULL,
-  q.k = 2,
-  k.only = FALSE,
-  ...
-) {
-  if (!is.null(x = k) && k.only) {
-    warning("Stop: k is already given, set k.only = FALSE or k = NULL")
-  }
-  genes.use <- genes.use %||% rownames(x = object)
-  assay <- assay %||% DefaultAssay(object = object)
-  alra.previous <- Tool(object = object, slot = 'RunALRA')
-  alra.info <- list()
-  # Check if k is already stored
-  if (is.null(x = k) & !is.null(alra.previous[["k"]])) {
-    k <- alra.previous[["k"]]
-    message("Using previously computed value of k")
-  }
-  data.used <- GetAssayData(object = object, assay = assay, slot = slot)[genes.use,]
-  # Choose k with heuristics if k is not given
-  if (is.null(x = k)) {
-    # set K based on data dimension
-    if (is.null(x = K)) {
-      K <- 100
-      if (K > min(dim(x = data.used))) {
-        K <- min(dim(x = data.used))
-        warning("For best performance, we recommend using ALRA on expression matrices larger than 100 by 100")
-      }
-    }
-    if (K > min(dim(x = data.used))) {
-      stop("For an m by n data, K must be smaller than the min(m,n)")
-    }
-    # set noise.start based on K
-    if (is.null(x = noise.start)) {
-      noise.start <- K - 20
-      if (noise.start <= 0) {
-        noise.start <- max(K - 5, 1)
-      }
-    }
-    if (noise.start > K - 5) {
-      stop("There need to be at least 5 singular values considered noise")
-    }
-    noise.svals <- noise.start:K
-    if (use.mkl) {
-      warning(
-        "Using the Intel MKL-based implementation of SVD requires RunALRA from SeuratWrappers\n",
-        "For more details, see https://github.com/satijalab/seurat-wrappers\n",
-        "Continuing with standard SVD implementation",
-        call. = FALSE,
-        immediate. = TRUE
-      )
-    }
-    rsvd.out <- rsvd(A = t(x = as.matrix(x = data.used)), k = K, q = q.k)
-    diffs <- rsvd.out$d[1:(length(x = rsvd.out$d)-1)] - rsvd.out$d[2:length(x = rsvd.out$d)]
-    mu <- mean(x = diffs[noise.svals - 1])
-    sigma <- sd(x = diffs[noise.svals - 1])
-    num_of_sds <- (diffs - mu) / sigma
-    k <- max(which(x = num_of_sds > thresh))
-    alra.info[["d"]] <- rsvd.out$d
-    alra.info[["k"]] <- k
-    alra.info[["diffs"]] <- diffs
-    Tool(object = object) <- alra.info
-  }
-  if (k.only) {
-    message("Chose rank k = ", k, ", WITHOUT performing ALRA")
-    return(object)
-  }
-  message("Rank k = ", k)
-  # Perform ALRA on data.used
-  output.alra <- RunALRA(
-    object = data.used,
-    k = k,
-    q = q,
-    quantile.prob = quantile.prob,
-    use.mkl = use.mkl,
-    mkl.seed = mkl.seed
-  )
-  # Save ALRA data in object@assay
-  data.alra <- Matrix(data = t(x = output.alra), sparse = TRUE)
-  rownames(x = data.alra) <- genes.use
-  colnames(x = data.alra) <- colnames(x = object)
-  assay.alra <- CreateAssayObject(data = data.alra)
-  object[["alra"]] <- assay.alra
-  if (setDefaultAssay) {
-    message("Setting default assay as alra")
-    DefaultAssay(object = object) <- "alra"
-  }
   return(object)
 }
 
@@ -2482,7 +2120,6 @@ ScaleData.Seurat <- function(
 #
 # @return Returns a named vector with demultiplexed identities
 #
-#' @importFrom KernSmooth bkde
 #' @importFrom stats approxfun quantile
 #
 # @author Chris McGinnis, Gartner Lab, UCSF
@@ -2499,7 +2136,7 @@ ClassifyCells <- function(data, q) {
   n_bc_calls <- numeric(length = n_cells)
   for (i in 1:ncol(x = data)) {
     model <- tryCatch(
-      expr = approxfun(x = bkde(x = data[, i], kernel = "normal")),
+      expr = approxfun(x = KernSmooth::bkde(x = data[, i], kernel = "normal")),
       error = function(e) {
         message("No threshold found for ", colnames(x = data)[i], "...")
       }
