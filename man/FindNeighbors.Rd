@@ -16,8 +16,6 @@ FindNeighbors(object, ...)
   k.param = 20,
   compute.SNN = TRUE,
   prune.SNN = 1/15,
-  nn.method = "rann",
-  annoy.metric = "euclidean",
   nn.eps = 0,
   verbose = TRUE,
   force.recalc = FALSE,
@@ -30,8 +28,6 @@ FindNeighbors(object, ...)
   k.param = 20,
   compute.SNN = TRUE,
   prune.SNN = 1/15,
-  nn.method = "rann",
-  annoy.metric = "euclidean",
   nn.eps = 0,
   verbose = TRUE,
   force.recalc = FALSE,
@@ -43,8 +39,6 @@ FindNeighbors(object, ...)
   k.param = 20,
   compute.SNN = TRUE,
   prune.SNN = 1/15,
-  nn.method = "rann",
-  annoy.metric = "euclidean",
   nn.eps = 0,
   verbose = TRUE,
   force.recalc = FALSE,
@@ -60,8 +54,6 @@ FindNeighbors(object, ...)
   k.param = 20,
   compute.SNN = TRUE,
   prune.SNN = 1/15,
-  nn.method = "rann",
-  annoy.metric = "euclidean",
   nn.eps = 0,
   verbose = TRUE,
   force.recalc = FALSE,
@@ -89,13 +81,7 @@ values less than or equal to this will be set to 0 and removed from the SNN
 graph. Essentially sets the strigency of pruning (0 --- no pruning, 1 ---
 prune everything).}
 
-\item{nn.method}{Method for nearest neighbor finding. Options include: rann,
-annoy}
-
-\item{annoy.metric}{Distance metric for annoy. Options include: euclidean,
-cosine, manhattan, and hamming}
-
-\item{nn.eps}{Error bound when performing nearest neighbor seach using RANN;
+\item{nn.eps}{Error bound when performing nearest neighbor search using RANN;
 default of 0.0 implies exact nearest neighbor search}
 
 \item{verbose}{Whether or not to print output to the console}
