@@ -535,9 +535,8 @@ NNHelper <- function(data, query = data, k, ...) {
 
 # Run Leiden clustering algorithm
 #
-# Implements the Leiden clustering algorithm in R using reticulate
-# to run the Python version. Requires the python "leidenalg" and "igraph" modules
-# to be installed. Returns a vector of partition indices.
+# Implements the Leiden clustering algorithm in R using leidenbase, which is not
+# yet on CRAN. Returns a vector of partition indices.
 #
 # @param adj_mat An adjacency matrix or SNN matrix
 # @param partition.type Type of partition to use for Leiden algorithm.
@@ -554,7 +553,6 @@ NNHelper <- function(data, query = data, k, ...) {
 #
 # @keywords graph network igraph mvtnorm simulation
 #
-#' @importFrom leidenbase leiden_find_partition
 #' @importFrom igraph graph_from_adjacency_matrix graph_from_adj_list
 #
 # @author Tom Kelly
@@ -580,6 +578,9 @@ RunLeiden <- function(
   n.iter = 10,
   verbose = TRUE
 ) {
+  if (!PackageCheck("leidenbase", error = FALSE)) {
+    stop("Please install leidenbase with devtools::install_github('cole-trapnell-lab/leidenbase')")
+  }
   input <- if (inherits(x = object, what = 'list')) {
     if (is.null(x = weights)) {
       graph_from_adj_list(adjlist = object)
@@ -601,11 +602,11 @@ RunLeiden <- function(
     )
   }
   #run leiden from leidenbase
-  partition <- leiden_find_partition(igraph = input,
+  partition <- leidenbase::leiden_find_partition(igraph = input,
                                      initial_membership = initial.membership,
                                      edge_weights = weights,
                                      node_sizes = node.sizes,
-                                     resolution_parameter = resolution,
+                                     resolution_parameter = resolution.parameter,
                                      seed = random.seed, verbose = verbose,
                                      partition_type = partition.type,
                                      num_iter = n.iter)
