@@ -8,7 +8,7 @@ NULL
 
 globalVariables(
   names = c('myAUC', 'p_val', 'avg_logFC'),
-  package = 'Seurat',
+  package = 'SeuratBasics',
   add = TRUE
 )
 #' Gene expression markers for all identity classes
@@ -16,30 +16,17 @@ globalVariables(
 #' Finds markers (differentially expressed genes) for each of the identity classes in a dataset
 #'
 #' @inheritParams FindMarkers
-#' @param node A node to find markers for and all its children; requires
-#' \code{\link{BuildClusterTree}} to have been run previously; replaces \code{FindAllMarkersNode}
 #' @param return.thresh Only return markers that have a p-value < return.thresh, or a power > return.thresh (if the test is ROC)
 #'
 #' @return Matrix containing a ranked list of putative markers, and associated
 #' statistics (p-values, ROC score, etc.)
 #'
-#' @importFrom ape drop.tip
 #' @importFrom stats setNames
-#'
 #' @export
-#'
-#' @aliases FindAllMarkersNode
-#'
 #' @examples
 #' # Find markers for all clusters
 #' all.markers <- FindAllMarkers(object = pbmc_small)
 #' head(x = all.markers)
-#' \dontrun{
-#' # Pass a value to node as a replacement for FindAllMarkersNode
-#' pbmc_small <- BuildClusterTree(object = pbmc_small)
-#' all.markers <- FindAllMarkers(object = pbmc_small, node = 4)
-#' head(x = all.markers)
-#' }
 #'
 FindAllMarkers <- function(
   object,
@@ -50,7 +37,6 @@ FindAllMarkers <- function(
   slot = 'data',
   min.pct = 0.1,
   min.diff.pct = -Inf,
-  node = NULL,
   verbose = TRUE,
   only.pos = FALSE,
   max.cells.per.ident = Inf,
@@ -70,30 +56,7 @@ FindAllMarkers <- function(
   if ((test.use == "roc") && (return.thresh == 1e-2)) {
     return.thresh <- 0.7
   }
-  if (is.null(x = node)) {
-    idents.all <- sort(x = unique(x = Idents(object = object)))
-  } else {
-    tree <- Tool(object = object, slot = 'BuildClusterTree')
-    if (is.null(x = tree)) {
-      stop("Please run 'BuildClusterTree' before finding markers on nodes")
-    }
-    descendants <- DFT(tree = tree, node = node, include.children = TRUE)
-    all.children <- sort(x = tree$edge[, 2][!tree$edge[, 2] %in% tree$edge[, 1]])
-    descendants <- MapVals(
-      vec = descendants,
-      from = all.children,
-      to = tree$tip.label
-    )
-    drop.children <- setdiff(x = tree$tip.label, y = descendants)
-    keep.children <- setdiff(x = tree$tip.label, y = drop.children)
-    orig.nodes <- c(
-      node,
-      as.numeric(x = setdiff(x = descendants, y = keep.children))
-    )
-    tree <- drop.tip(phy = tree, tip = drop.children)
-    new.nodes <- unique(x = tree$edge[, 1, drop = TRUE])
-    idents.all <- (tree$Nnode + 2):max(tree$edge)
-  }
+  idents.all <- sort(x = unique(x = Idents(object = object)))
   genes.de <- list()
   messages <- list()
   for (i in 1:length(x = idents.all)) {
@@ -105,16 +68,8 @@ FindAllMarkers <- function(
         FindMarkers(
           object = object,
           assay = assay,
-          ident.1 = if (is.null(x = node)) {
-            idents.all[i]
-          } else {
-            tree
-          },
-          ident.2 = if (is.null(x = node)) {
-            NULL
-          } else {
-            idents.all[i]
-          },
+          ident.1 = idents.all[i],
+          ident.2 = NULL,
           features = features,
           logfc.threshold = logfc.threshold,
           test.use = test.use,
@@ -153,7 +108,7 @@ FindAllMarkers <- function(
           x = gde,
           subset = (myAUC > return.thresh | myAUC < (1 - return.thresh))
         )
-      } else if (is.null(x = node) || test.use %in% c('bimod', 't')) {
+      } else {
         gde <- gde[order(gde$p_val, -gde[, 2]), ]
         gde <- subset(x = gde, subset = p_val < return.thresh)
       }
@@ -181,189 +136,7 @@ FindAllMarkers <- function(
       }
     }
   }
-  if (!is.null(x = node)) {
-    gde.all$cluster <- MapVals(
-      vec = gde.all$cluster,
-      from = new.nodes,
-      to = orig.nodes
-    )
-  }
   return(gde.all)
-}
-
-#' Finds markers that are conserved between the groups
-#'
-#' @inheritParams FindMarkers
-#' @param ident.1 Identity class to define markers for
-#' @param ident.2 A second identity class for comparison. If NULL (default) -
-#' use all other cells for comparison.
-#' @param grouping.var grouping variable
-#' @param assay of assay to fetch data for (default is RNA)
-#' @param meta.method method for combining p-values. Should be a function from
-#' the metap package (NOTE: pass the function, not a string)
-#' @param \dots parameters to pass to FindMarkers
-#'
-#' @return data.frame containing a ranked list of putative conserved markers, and
-#' associated statistics (p-values within each group and a combined p-value
-#' (such as Fishers combined p-value or others from the metap package),
-#' percentage of cells expressing the marker, average differences). Name of group is appended to each
-#' associated output column (e.g. CTRL_p_val). If only one group is tested in the grouping.var, max
-#' and combined p-values are not returned.
-#'
-#' @importFrom metap minimump
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' pbmc_small
-#' # Create a simulated grouping variable
-#' pbmc_small[['groups']] <- sample(x = c('g1', 'g2'), size = ncol(x = pbmc_small), replace = TRUE)
-#' FindConservedMarkers(pbmc_small, ident.1 = 0, ident.2 = 1, grouping.var = "groups")
-#' }
-#'
-FindConservedMarkers <- function(
-  object,
-  ident.1,
-  ident.2 = NULL,
-  grouping.var,
-  assay = 'RNA',
-  slot = 'data',
-  meta.method = minimump,
-  verbose = TRUE,
-  ...
-) {
-  if (!is.function(x = meta.method)) {
-    stop("meta.method should be a function from the metap package. Please see https://cran.r-project.org/web/packages/metap/metap.pdf for a detailed description of the available functions.")
-  }
-  object.var <- FetchData(object = object, vars = grouping.var)
-  object <- SetIdent(
-    object = object,
-    cells = colnames(x = object),
-    value = paste(Idents(object = object), object.var[, 1], sep = "_")
-  )
-  levels.split <- names(x = sort(x = table(object.var[, 1])))
-  num.groups <- length(levels.split)
-  cells <- list()
-  for (i in 1:num.groups) {
-    cells[[i]] <- rownames(
-      x = object.var[object.var[, 1] == levels.split[i], , drop = FALSE]
-    )
-  }
-  marker.test <- list()
-  # do marker tests
-  ident.2.save <- ident.2
-  for (i in 1:num.groups) {
-    level.use <- levels.split[i]
-    ident.use.1 <- paste(ident.1, level.use, sep = "_")
-    ident.use.1.exists <- ident.use.1 %in% Idents(object = object)
-    if (!all(ident.use.1.exists)) {
-      bad.ids <- ident.1[!ident.use.1.exists]
-      warning(
-        "Identity: ",
-        paste(bad.ids, collapse = ", "),
-        " not present in group ",
-        level.use,
-        ". Skipping ",
-        level.use,
-        call. = FALSE,
-        immediate. = TRUE
-      )
-      next
-    }
-    ident.2 <- ident.2.save
-    cells.1 <- WhichCells(object = object, idents = ident.use.1)
-    if (is.null(x = ident.2)) {
-      cells.2 <- setdiff(x = cells[[i]], y = cells.1)
-      ident.use.2 <- names(x = which(x = table(Idents(object = object)[cells.2]) > 0))
-      ident.2 <- gsub(pattern = paste0("_", level.use), replacement = "", x = ident.use.2)
-      if (length(x = ident.use.2) == 0) {
-        stop(paste("Only one identity class present:", ident.1))
-      }
-    } else {
-      ident.use.2 <- paste(ident.2, level.use, sep = "_")
-    }
-    if (verbose) {
-      message(
-        "Testing group ",
-        level.use,
-        ": (",
-        paste(ident.1, collapse = ", "),
-        ") vs (",
-        paste(ident.2, collapse = ", "),
-        ")"
-      )
-    }
-    ident.use.2.exists <- ident.use.2 %in% Idents(object = object)
-    if (!all(ident.use.2.exists)) {
-      bad.ids <- ident.2[!ident.use.2.exists]
-      warning(
-        "Identity: ",
-        paste(bad.ids, collapse = ", "),
-        " not present in group ",
-        level.use,
-        ". Skipping ",
-        level.use,
-        call. = FALSE,
-        immediate. = TRUE
-      )
-      next
-    }
-    marker.test[[i]] <- FindMarkers(
-      object = object,
-      assay = assay,
-      slot = slot,
-      ident.1 = ident.use.1,
-      ident.2 = ident.use.2,
-      verbose = verbose,
-      ...
-    )
-    names(x = marker.test)[i] <- levels.split[i]
-  }
-  marker.test <- Filter(f = Negate(f = is.null), x = marker.test)
-  genes.conserved <- Reduce(
-    f = intersect,
-    x = lapply(
-      X = marker.test,
-      FUN = function(x) {
-        return(rownames(x = x))
-      }
-    )
-  )
-  markers.conserved <- list()
-  for (i in 1:length(x = marker.test)) {
-    markers.conserved[[i]] <- marker.test[[i]][genes.conserved, ]
-    colnames(x = markers.conserved[[i]]) <- paste(
-      names(x = marker.test)[i],
-      colnames(x = markers.conserved[[i]]),
-      sep = "_"
-    )
-  }
-  markers.combined <- Reduce(cbind, markers.conserved)
-  pval.codes <- colnames(x = markers.combined)[grepl(pattern = "*_p_val$", x = colnames(x = markers.combined))]
-  if (length(x = pval.codes) > 1) {
-    markers.combined$max_pval <- apply(
-      X = markers.combined[, pval.codes, drop = FALSE],
-      MARGIN = 1,
-      FUN = max
-    )
-    combined.pval <- data.frame(cp = apply(
-      X = markers.combined[, pval.codes, drop = FALSE],
-      MARGIN = 1,
-      FUN = function(x) {
-        return(meta.method(x)$p)
-      }
-    ))
-    colnames(x = combined.pval) <- paste0(
-      as.character(x = formals()$meta.method),
-      "_p_val"
-    )
-    markers.combined <- cbind(markers.combined, combined.pval)
-    markers.combined <- markers.combined[order(markers.combined[, paste0(as.character(x = formals()$meta.method), "_p_val")]), ]
-  } else {
-    warning("Only a single group was tested", call. = FALSE, immediate. = TRUE)
-  }
-  return(markers.combined)
 }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -685,12 +458,9 @@ FindMarkers.default <- function(
   return(de.results)
 }
 
-#' @param ident.1 Identity class to define markers for; pass an object of class
-#' \code{phylo} or 'clustertree' to find markers for a node in a cluster tree;
-#' passing 'clustertree' requires \code{\link{BuildClusterTree}} to have been run
+#' @param ident.1 Identity class to define markers for.
 #' @param ident.2 A second identity class for comparison; if \code{NULL},
-#' use all other cells for comparison; if an object of class \code{phylo} or
-#' 'clustertree' is passed to \code{ident.1}, must pass a node to find markers for
+#' use all other cells for comparison.
 #' @param reduction Reduction to use in differential expression testing - will test for DE on cell embeddings
 #' @param group.by Regroup cells into a different identity class prior to performing differential expression (see example)
 #' @param subset.ident Subset a particular identity class prior to regrouping. Only relevant if group.by is set (see example)
@@ -753,20 +523,6 @@ FindMarkers.Seurat <- function(
   }
   if (is.null(x = ident.1)) {
     stop("Please provide ident.1")
-  } else if ((length(x = ident.1) == 1 && ident.1[1] == 'clustertree') || is(object = ident.1, class2 = 'phylo')) {
-    if (is.null(x = ident.2)) {
-      stop("Please pass a node to 'ident.2' to run FindMarkers on a tree")
-    }
-    tree <- if (is(object = ident.1, class2 = 'phylo')) {
-      ident.1
-    } else {
-      Tool(object = object, slot = 'BuildClusterTree')
-    }
-    if (is.null(x = tree)) {
-      stop("Please run 'BuildClusterTree' or pass an object of class 'phylo' as 'ident.1'")
-    }
-    ident.1 <- tree$tip.label[GetLeftDescendants(tree = tree, node = ident.2)]
-    ident.2 <- tree$tip.label[GetRightDescendants(tree = tree, node = ident.2)]
   }
   if (length(x = as.vector(x = ident.1)) > 1 &&
       any(as.character(x = ident.1) %in% colnames(x = data.use))) {

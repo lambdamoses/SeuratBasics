@@ -585,76 +585,6 @@ VlnPlot <- function(
 # Dimensional reduction plots
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-#' Color dimensional reduction plot by tree split
-#'
-#' Returns a DimPlot colored based on whether the cells fall in clusters
-#' to the left or to the right of a node split in the cluster tree.
-#'
-#' @param object Seurat object
-#' @param node Node in cluster tree on which to base the split
-#' @param left.color Color for the left side of the split
-#' @param right.color Color for the right side of the split
-#' @param other.color Color for all other cells
-#' @inheritDotParams DimPlot -object
-#'
-#' @return Returns a DimPlot
-#'
-#' @export
-#'
-#' @seealso \code{\link{DimPlot}}
-#'
-#' @examples
-#' pbmc_small
-#' pbmc_small <- BuildClusterTree(object = pbmc_small, verbose = FALSE)
-#' PlotClusterTree(pbmc_small)
-#' ColorDimSplit(pbmc_small, node = 5)
-#'
-ColorDimSplit <- function(
-  object,
-  node,
-  left.color = 'red',
-  right.color = 'blue',
-  other.color = 'grey50',
-  ...
-) {
-  CheckDots(..., fxns = 'DimPlot')
-  tree <- Tool(object = object, slot = "BuildClusterTree")
-  split <- tree$edge[which(x = tree$edge[, 1] == node), ][, 2]
-  all.children <- sort(x = tree$edge[, 2][! tree$edge[, 2] %in% tree$edge[, 1]])
-  left.group <- DFT(tree = tree, node = split[1], only.children = TRUE)
-  right.group <- DFT(tree = tree, node = split[2], only.children = TRUE)
-  if (any(is.na(x = left.group))) {
-    left.group <- split[1]
-  }
-  if (any(is.na(x = right.group))) {
-    right.group <- split[2]
-  }
-  left.group <- MapVals(v = left.group, from = all.children, to = tree$tip.label)
-  right.group <- MapVals(v = right.group, from = all.children, to = tree$tip.label)
-  remaining.group <- setdiff(x = tree$tip.label, y = c(left.group, right.group))
-  left.cells <- WhichCells(object = object, ident = left.group)
-  right.cells <- WhichCells(object = object, ident = right.group)
-  remaining.cells <- WhichCells(object = object, ident = remaining.group)
-  object <- SetIdent(
-    object = object,
-    cells = left.cells,
-    value = "Left Split"
-  )
-  object <- SetIdent(
-    object = object,
-    cells = right.cells,
-    value = "Right Split"
-  )
-  object <- SetIdent(
-    object = object,
-    cells = remaining.cells,
-    value = "Not in Split"
-  )
-  levels(x = object) <- c("Left Split", "Right Split", "Not in Split")
-  colors.use = c(left.color, right.color, other.color)
-  return(DimPlot(object = object, cols = colors.use, ...))
-}
-
 #' Dimensional reduction plot
 #'
 #' Graphs the output of a dimensional reduction technique on a 2D scatter plot where each point is a
@@ -700,17 +630,13 @@ ColorDimSplit <- function(
 #' @return A \code{\link[patchwork]{patchwork}ed} ggplot object if
 #' \code{combine = TRUE}; otherwise, a list of ggplot objects
 #'
-#' @importFrom rlang !!
-#' @importFrom ggplot2 facet_wrap vars sym
+#' @importFrom ggplot2 facet_wrap
 #' @importFrom patchwork wrap_plots
 #'
 #' @export
 #'
-#' @note For the old \code{do.hover} and \code{do.identify} functionality, please see
-#' \code{HoverLocator} and \code{CellSelector}, respectively.
-#'
-#' @aliases TSNEPlot PCAPlot ICAPlot
-#' @seealso \code{\link{FeaturePlot}} \code{\link{HoverLocator}}
+#' @aliases TSNEPlot PCAPlot
+#' @seealso \code{\link{FeaturePlot}} 
 #' \code{\link{CellSelector}} \code{\link{FetchData}}
 #'
 #' @examples
@@ -790,7 +716,7 @@ DimPlot <- function(
       if (!is.null(x = split.by)) {
         plot <- plot + FacetTheme() +
           facet_wrap(
-            facets = vars(!!sym(x = split.by)),
+            facets = split.by,
             ncol = if (length(x = group.by) > 1 || is.null(x = ncol)) {
               length(x = unique(x = data[, split.by]))
             } else {
@@ -861,11 +787,8 @@ DimPlot <- function(
 #'
 #' @export
 #'
-#' @note For the old \code{do.hover} and \code{do.identify} functionality, please see
-#' \code{HoverLocator} and \code{CellSelector}, respectively.
-#'
 #' @aliases FeatureHeatmap
-#' @seealso \code{\link{DimPlot}} \code{\link{HoverLocator}}
+#' @seealso \code{\link{DimPlot}} 
 #' \code{\link{CellSelector}}
 #'
 #' @examples
@@ -1690,79 +1613,6 @@ PolyFeaturePlot <- function(
 # Other plotting functions
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-#' ALRA Approximate Rank Selection Plot
-#'
-#' Plots the results of the approximate rank selection process for ALRA.
-#'
-#' @note ALRAChooseKPlot and associated functions are being moved to SeuratWrappers;
-#' for more information on SeuratWrappers, please see \url{https://github.com/satijalab/seurat-wrappers}
-#'
-#' @param object Seurat object
-#' @param start Index to start plotting singular value spacings from.
-#' The transition from "signal" to "noise" in the is hard to see because the
-#' first singular value spacings are so large. Nicer visualizations result from
-#' skipping the first few. If set to 0 (default) starts from k/2.
-#' @param combine Combine plots into a single \code{\link[patchwork]{patchwork}ed}
-#' ggplot object. If \code{FALSE}, return a list of ggplot objects
-#'
-#' @return A list of 3 \code{\link[patchwork]{patchwork}ed} ggplot objects
-#' splotting the singular values, the spacings of the singular values, and the
-#' p-values of the singular values.
-#'
-#' @author Jun Zhao, George Linderman
-#' @seealso \code{\link{RunALRA}}
-#'
-#' @importFrom cowplot theme_cowplot
-#' @importFrom ggplot2 ggplot aes_string geom_point geom_line
-#' geom_vline scale_x_continuous labs
-#' @importFrom patchwork wrap_plots
-#' @export
-#'
-ALRAChooseKPlot <- function(object, start = 0, combine = TRUE) {
-  .Deprecated(
-    new = 'SeruatWrappers::ALRAChooseKPlot',
-    msg = paste(
-      'ALRAChooseKPlot and associated functions are being moved to SeuratWrappers;',
-      'for more information on SeuratWrappers, please see https://github.com/satijalab/seurat-wrappers'
-    )
-  )
-  alra.data <- Tool(object = object, slot = 'RunALRA')
-  if (is.null(x = alra.data)) {
-    stop('RunALRA should be run prior to using this function.')
-  }
-  d <- alra.data[["d"]]
-  diffs <- alra.data[["diffs"]]
-  k <- alra.data[["k"]]
-  if (start == 0) {
-    start <- floor(x = k / 2)
-  }
-  if (start > k) {
-    stop("Plots should include k (i.e. starting.from should be less than k)")
-  }
-  breaks <- seq(from = 10, to = length(x = d), by = 10)
-  ggdata <- data.frame(x = 1:length(x = d), y = d)
-  gg1 <- ggplot(data = ggdata, mapping = aes_string(x = 'x', y = 'y')) +
-    geom_point(size = 1) +
-    geom_line(size = 0.5) +
-    geom_vline(xintercept = k) +
-    theme_cowplot() +
-    scale_x_continuous(breaks = breaks) +
-    labs(x = NULL, y = 's_i', title = 'Singular values')
-  ggdata <- data.frame(x = 1:(length(x = d) - 1), y = diffs)[-(1:(start - 1)), ]
-  gg2 <- ggplot(data = ggdata, mapping = aes_string(x = 'x', y = 'y')) +
-    geom_point(size = 1) +
-    geom_line(size = 0.5) +
-    geom_vline(xintercept = k + 1) +
-    theme_cowplot() +
-    scale_x_continuous(breaks = breaks) +
-    labs(x = NULL, y = 's_{i} - s_{i-1}', title = 'Singular value spacings')
-  plots <- list(spectrum = gg1, spacings = gg2)
-  if (combine) {
-    plots <- wrap_plots(plots)
-  }
-  return(plots)
-}
-
 #' Plot the Barcode Distribution and Calculated Inflection Points
 #'
 #' This function plots the calculated inflection points derived from the barcode-rank
@@ -2141,33 +1991,6 @@ JackStrawPlot <- function(
   return(gp)
 }
 
-#' Plot clusters as a tree
-#'
-#' Plots previously computed tree (from BuildClusterTree)
-#'
-#' @param object Seurat object
-#' @param \dots Additional arguments to ape::plot.phylo
-#'
-#' @return Plots dendogram (must be precomputed using BuildClusterTree), returns no value
-#'
-#' @importFrom ape plot.phylo
-#' @importFrom ape nodelabels
-#'
-#' @export
-#'
-#' @examples
-#' pbmc_small <- BuildClusterTree(object = pbmc_small)
-#' PlotClusterTree(object = pbmc_small)
-#'
-PlotClusterTree <- function(object, ...) {
-  if (is.null(x = Tool(object = object, slot = "BuildClusterTree"))) {
-    stop("Phylogenetic tree does not exist, build using BuildClusterTree")
-  }
-  data.tree <- Tool(object = object, slot = "BuildClusterTree")
-  plot.phylo(x = data.tree, direction = "downwards", ...)
-  nodelabels()
-}
-
 #' Visualize Dimensional Reduction genes
 #'
 #' Visualize top genes associated with reduction components
@@ -2318,7 +2141,7 @@ AugmentPlot <- function(plot, width = 10, height = 10, dpi = 100) {
   return(blank)
 }
 
-#' @inheritParams CustomPalette
+#' 
 #'
 #' @export
 #'
@@ -2333,7 +2156,7 @@ BlackAndWhite <- function(mid = NULL, k = 50) {
   return(CustomPalette(low = "white", high = "black", mid = mid, k = k))
 }
 
-#' @inheritParams CustomPalette
+#' 
 #'
 #' @export
 #'
@@ -2680,131 +2503,6 @@ FeatureLocator <- function(plot, ...) {
   )
 }
 
-#' Hover Locator
-#'
-#' Get quick information from a scatterplot by hovering over points
-#'
-#' @param plot A ggplot2 plot
-#' @param information An optional dataframe or matrix of extra information to be displayed on hover
-#' @param dark.theme Plot using a dark theme?
-#' @param ... Extra parameters to be passed to \code{plotly::layout}
-#'
-#' @importFrom ggplot2 ggplot_build
-#' @importFrom plotly plot_ly layout
-#' @export
-#'
-#' @seealso \code{\link[plotly]{layout}} \code{\link[ggplot2]{ggplot_build}}
-#' \code{\link{DimPlot}} \code{\link{FeaturePlot}}
-#'
-#' @examples
-#' \dontrun{
-#' plot <- DimPlot(object = pbmc_small)
-#' HoverLocator(plot = plot, information = FetchData(object = pbmc_small, vars = 'percent.mito'))
-#' }
-#'
-HoverLocator <- function(
-  plot,
-  information = NULL,
-  dark.theme = FALSE,
-  ...
-) {
-  #   Use GGpointToBase because we already have ggplot objects
-  #   with colors (which are annoying in plotly)
-  plot.build <- GGpointToBase(plot = plot, do.plot = FALSE)
-  data <- ggplot_build(plot = plot)$plot$data
-  rownames(x = plot.build) <- rownames(x = data)
-  #   Reset the names to 'x' and 'y'
-  names(x = plot.build) <- c(
-    'x',
-    'y',
-    names(x = plot.build)[3:length(x = plot.build)]
-  )
-  #   Add the names we're looking for (eg. cell name, gene name)
-  if (is.null(x = information)) {
-    plot.build$feature <- rownames(x = data)
-  } else {
-    info <- apply(
-      X = information,
-      MARGIN = 1,
-      FUN = function(x, names) {
-        return(paste0(names, ': ', x, collapse = '<br>'))
-      },
-      names = colnames(x = information)
-    )
-    data.info <- data.frame(
-      feature = paste(rownames(x = information), info, sep = '<br>'),
-      row.names = rownames(x = information)
-    )
-    plot.build <- merge(x = plot.build, y = data.info, by = 0)
-  }
-  #   Set up axis labels here
-  #   Also, a bunch of stuff to get axis lines done properly
-  xaxis <- list(
-    title = names(x = data)[1],
-    showgrid = FALSE,
-    zeroline = FALSE,
-    showline = TRUE
-  )
-  yaxis <- list(
-    title = names(x = data)[2],
-    showgrid = FALSE,
-    zeroline = FALSE,
-    showline = TRUE
-  )
-  #   Check for dark theme
-  if (dark.theme) {
-    title <- list(color = 'white')
-    xaxis <- c(xaxis, color = 'white')
-    yaxis <- c(yaxis, color = 'white')
-    plotbg <- 'black'
-  } else {
-    title = list(color = 'black')
-    plotbg = 'white'
-  }
-  #   The `~' means pull from the data passed (this is why we reset the names)
-  #   Use I() to get plotly to accept the colors from the data as is
-  #   Set hoverinfo to 'text' to override the default hover information
-  #   rather than append to it
-  p <- plotly::layout(
-    p = plot_ly(
-      data = plot.build,
-      x = ~x,
-      y = ~y,
-      type = 'scatter',
-      mode = 'markers',
-      color = ~I(color),
-      hoverinfo = 'text',
-      text = ~feature
-    ),
-    xaxis = xaxis,
-    yaxis = yaxis,
-    title = plot$labels$title,
-    titlefont = title,
-    paper_bgcolor = plotbg,
-    plot_bgcolor = plotbg,
-    ...
-  )
-  # add labels
-  label.layer <- which(x = sapply(
-    X = plot$layers,
-    FUN = function(x) class(x$geom)[1] == "GeomText")
-  )
-  if (length(x = label.layer) == 1) {
-    p <- plotly::add_annotations(
-      p = p,
-      x = plot$layers[[label.layer]]$data[, 1],
-      y = plot$layers[[label.layer]]$data[, 2],
-      xref = "x",
-      yref = "y",
-      text = plot$layers[[label.layer]]$data[, 3],
-      xanchor = 'right',
-      showarrow = FALSE,
-      font = list(size = plot$layers[[label.layer]]$aes_params$size * 4)
-    )
-  }
-  return(p)
-}
-
 #' Label clusters on a ggplot2-based scatter plot
 #'
 #' @param plot A ggplot2-based scatter plot
@@ -2969,7 +2667,7 @@ LabelPoints <- function(
   return(plot)
 }
 
-#' @inheritParams CustomPalette
+#' 
 #'
 #' @export
 #'
@@ -3019,7 +2717,7 @@ SeuratTheme <- function() {
   return(DarkTheme() + NoLegend() + NoGrid() + SeuratAxes())
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #'
 #' @importFrom ggplot2 theme element_rect element_text element_line margin
 #' @export
@@ -3080,7 +2778,7 @@ DarkTheme <- function(...) {
   return(dark.theme)
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #' @param x.text,y.text X and Y axis text sizes
 #' @param x.title,y.title X and Y axis title sizes
 #' @param main Plot title size
@@ -3113,7 +2811,7 @@ FontSize <- function(
   )
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #' @param keep.text Keep axis text
 #' @param keep.ticks Keep axis ticks
 #'
@@ -3161,7 +2859,7 @@ NoAxes <- function(..., keep.text = FALSE, keep.ticks = FALSE) {
   return(no.axes.theme)
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #'
 #' @importFrom ggplot2 theme
 #' @export
@@ -3187,7 +2885,7 @@ NoLegend <- function(...) {
   return(no.legend.theme)
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #'
 #' @importFrom ggplot2 theme element_blank
 #' @export
@@ -3214,7 +2912,7 @@ NoGrid <- function(...) {
   return(no.grid.theme)
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #'
 #' @importFrom ggplot2 theme element_text
 #' @export
@@ -3234,7 +2932,7 @@ SeuratAxes <- function(...) {
   return(axes.theme)
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #'
 #' @export
 #'
@@ -3245,7 +2943,7 @@ SpatialTheme <- function(...) {
   return(DarkTheme() + NoAxes() + NoGrid() + NoLegend(...))
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #' @param position A position to restore the legend to
 #'
 #' @importFrom ggplot2 theme
@@ -3265,7 +2963,7 @@ RestoreLegend <- function(..., position = 'right') {
   return(restored.theme)
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #'
 #' @importFrom ggplot2 theme element_text
 #' @export
@@ -3284,7 +2982,7 @@ RotatedAxis <- function(...) {
   return(rotated.theme)
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #'
 #' @importFrom ggplot2 theme element_text
 #' @export
@@ -3303,7 +3001,7 @@ BoldTitle <- function(...) {
   return(bold.theme)
 }
 
-#' @inheritParams SeuratTheme
+#' 
 #'
 #' @importFrom ggplot2 theme element_rect
 #' @export
@@ -3753,7 +3451,7 @@ ExIPlot <- function(
 
 # Make a theme for facet plots
 #
-# @inheritParams SeuratTheme
+# 
 # @export
 #
 # @rdname SeuratTheme
@@ -4254,7 +3952,7 @@ SetQuantile <- function(cutoff, data) {
   return(as.numeric(x = cutoff))
 }
 
-globalVariables(names = '..density..', package = 'Seurat')
+globalVariables(names = '..density..', package = 'SeuratBasics')
 # A single correlation plot
 #
 # @param data.plot A data frame with two columns to be plotted
