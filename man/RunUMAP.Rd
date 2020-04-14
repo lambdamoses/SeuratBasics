@@ -3,7 +3,6 @@
 \name{RunUMAP}
 \alias{RunUMAP}
 \alias{RunUMAP.default}
-\alias{RunUMAP.Graph}
 \alias{RunUMAP.Seurat}
 \title{Run UMAP}
 \usage{
@@ -12,7 +11,6 @@ RunUMAP(object, ...)
 \method{RunUMAP}{default}(
   object,
   assay = NULL,
-  umap.method = "uwot",
   n.neighbors = 30L,
   n.components = 2L,
   metric = "cosine",
@@ -35,28 +33,6 @@ RunUMAP(object, ...)
   ...
 )
 
-\method{RunUMAP}{Graph}(
-  object,
-  assay = NULL,
-  umap.method = "umap-learn",
-  n.components = 2L,
-  metric = "correlation",
-  n.epochs = 0L,
-  learning.rate = 1,
-  min.dist = 0.3,
-  spread = 1,
-  repulsion.strength = 1,
-  negative.sample.rate = 5L,
-  a = NULL,
-  b = NULL,
-  uwot.sgd = FALSE,
-  seed.use = 42L,
-  metric.kwds = NULL,
-  verbose = TRUE,
-  reduction.key = "UMAP_",
-  ...
-)
-
 \method{RunUMAP}{Seurat}(
   object,
   dims = NULL,
@@ -64,7 +40,6 @@ RunUMAP(object, ...)
   features = NULL,
   graph = NULL,
   assay = "RNA",
-  umap.method = "uwot",
   n.neighbors = 30L,
   n.components = 2L,
   metric = "cosine",
@@ -93,14 +68,7 @@ RunUMAP(object, ...)
 
 \item{...}{Arguments passed to other methods and UMAP}
 
-\item{assay}{Assay to pull data for when using \code{features}, or assay used to construct Graph
-if running UMAP on a Graph}
-
-\item{umap.method}{UMAP implementation to run. Can be
-\describe{
-  \item{\code{uwot}:}{Runs umap via the uwot R package}
-  \item{\code{umap-learn}:}{Run the Seurat wrapper of the python umap-learn package}
-}}
+\item{assay}{Assay to pull data for when using \code{features}.}
 
 \item{n.neighbors}{This determines the number of neighboring points used in
 local approximations of manifold structure. Larger values will result in more
