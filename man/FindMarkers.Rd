@@ -149,13 +149,10 @@ of the two groups, currently only used for poisson and negative binomial tests}
 \item{pseudocount.use}{Pseudocount to add to averaged expression values when
 calculating logFC. 1 by default.}
 
-\item{ident.1}{Identity class to define markers for; pass an object of class
-\code{phylo} or 'clustertree' to find markers for a node in a cluster tree;
-passing 'clustertree' requires \code{\link{BuildClusterTree}} to have been run}
+\item{ident.1}{Identity class to define markers for.}
 
 \item{ident.2}{A second identity class for comparison; if \code{NULL},
-use all other cells for comparison; if an object of class \code{phylo} or
-'clustertree' is passed to \code{ident.1}, must pass a node to find markers for}
+use all other cells for comparison.}
 
 \item{group.by}{Regroup cells into a different identity class prior to performing differential expression (see example)}
 
@@ -192,12 +189,6 @@ head(x = markers)
 # Take all cells in cluster 2, and find markers that separate cells in the 'g1' group (metadata
 # variable 'group')
 markers <- FindMarkers(pbmc_small, ident.1 = "g1", group.by = 'groups', subset.ident = "2")
-head(x = markers)
-
-# Pass 'clustertree' or an object of class phylo to ident.1 and
-# a node to ident.2 as a replacement for FindMarkersNode
-pbmc_small <- BuildClusterTree(object = pbmc_small)
-markers <- FindMarkers(object = pbmc_small, ident.1 = 'clustertree', ident.2 = 5)
 head(x = markers)
 
 }
