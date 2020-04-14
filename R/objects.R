@@ -4,7 +4,7 @@
 #' @importFrom methods setClass setOldClass setClassUnion slot
 #' slot<- setMethod new signature slotNames is
 #' @importClassesFrom Matrix dgCMatrix
-#' @useDynLib Seurat
+#' @useDynLib SeuratBasics
 #'
 NULL
 
@@ -15,42 +15,6 @@ NULL
 setOldClass(Classes = 'package_version')
 setClassUnion(name = 'AnyMatrix', members = c("matrix", "dgCMatrix"))
 setClassUnion(name = 'OptionalCharacter', members = c('NULL', 'character'))
-
-#' The AnchorSet Class
-#'
-#' The AnchorSet class is an intermediate data storage class that stores the anchors and other
-#' related information needed for performing downstream analyses - namely data integration
-#' (\code{\link{IntegrateData}}) and data transfer (\code{\link{TransferData}}).
-#'
-#' @slot object.list List of objects used to create anchors
-#' @slot reference.cells List of cell names in the reference dataset - needed when performing data
-#' transfer.
-#' @slot reference.objects Position of reference object/s in object.list
-#' @slot query.cells List of cell names in the query dataset - needed when performing data transfer
-#' @slot anchors The anchor matrix. This contains the cell indices of both anchor pair cells, the
-#' anchor score, and the index of the original dataset in the object.list for cell1 and cell2 of
-#' the anchor.
-#' @slot offsets The offsets used to enable cell look up in downstream functions
-#' @slot anchor.features The features used when performing anchor finding.
-#' @slot command Store log of parameters that were used
-#'
-#' @name AnchorSet-class
-#' @rdname AnchorSet-class
-#' @exportClass AnchorSet
-#'
-AnchorSet <- setClass(
-  Class = "AnchorSet",
-  slots = list(
-    object.list = "list",
-    reference.cells = "vector",
-    reference.objects = "vector",
-    query.cells = "vector",
-    anchors = "ANY",
-    offsets = "ANY",
-    anchor.features = "ANY",
-    command = "ANY"
-  )
-)
 
 #' The Assay Class
 #'
@@ -165,36 +129,6 @@ Graph <- setClass(
   contains = "dgCMatrix",
   slots = list(
     assay.used = 'OptionalCharacter'
-  )
-)
-
-#' The IntegrationData Class
-#'
-#' The IntegrationData object is an intermediate storage container used internally throughout the
-#' integration procedure to hold bits of data that are useful downstream.
-#'
-#' @slot neighbors List of neighborhood information for cells (outputs of \code{RANN::nn2})
-#' @slot weights Anchor weight matrix
-#' @slot integration.matrix Integration matrix
-#' @slot anchors Anchor matrix
-#' @slot offsets The offsets used to enable cell look up in downstream functions
-#' @slot objects.ncell Number of cells in each object in the object.list
-#' @slot sample.tree Sample tree used for ordering multi-dataset integration
-#'
-#' @name IntegrationData-class
-#' @rdname IntegrationData-class
-#' @exportClass IntegrationData
-#'
-IntegrationData <- setClass(
-  Class = "IntegrationData",
-  slots = list(
-    neighbors = "ANY",
-    weights = "ANY",
-    integration.matrix = "ANY",
-    anchors = "ANY",
-    offsets = "ANY",
-    objects.ncell = "ANY",
-    sample.tree = "ANY"
   )
 )
 
@@ -1118,25 +1052,6 @@ FetchData <- function(object, vars, cells = NULL, slot = 'data') {
   return(data.fetched)
 }
 
-#' Get integation data
-#'
-#' @param object Seurat object
-#' @param integration.name Name of integration object
-#' @param slot Which slot in integration object to get
-#'
-#' @return Returns data from the requested slot within the integrated object
-#'
-#' @export
-#'
-GetIntegrationData <- function(object, integration.name, slot) {
-  tools <- slot(object = object, name = 'tools')
-  if (!(integration.name %in% names(tools))) {
-    stop('Requested integration key does not exist')
-  }
-  int.data <- tools[[integration.name]]
-  return(slot(object = int.data, name = slot))
-}
-
 #' Log a command
 #'
 #' Logs command run, storing the name, timestamp, and argument list. Stores in
@@ -1311,33 +1226,6 @@ RenameAssays <- function(object, ...) {
     Key(object = object[[new]]) <- old.key
     object[[old]] <- NULL
   }
-  return(object)
-}
-
-#' Set integation data
-#'
-#' @param object Seurat object
-#' @param integration.name Name of integration object
-#' @param slot Which slot in integration object to set
-#' @param new.data New data to insert
-#'
-#' @return Returns a \code{\link{Seurat}} object
-#'
-#' @export
-#'
-SetIntegrationData <- function(object, integration.name, slot, new.data) {
-  tools <- slot(object = object, name = 'tools')
-  if (!(integration.name %in% names(tools))) {
-    new.integrated <- new(Class = 'IntegrationData')
-    slot(object = new.integrated, name = slot) <- new.data
-    tools[[integration.name]] <- new.integrated
-    slot(object = object, name = 'tools') <- tools
-    return(object)
-  }
-  int.data <- tools[[integration.name]]
-  slot(object = int.data, name = slot) <- new.data
-  tools[[integration.name]] <- int.data
-  slot(object = object, name = 'tools') <- tools
   return(object)
 }
 
@@ -4390,7 +4278,7 @@ SetAssayData.Seurat <- function(
   return(object)
 }
 
-#' @inheritParams Idents
+#' 
 #'
 #' @rdname Idents
 #' @export
@@ -4412,7 +4300,7 @@ SetIdent.Seurat <- function(object, cells = NULL, value, ...) {
   return(object)
 }
 
-#' @inheritParams Idents
+#' 
 #' @param save.name Store current identity information under this name
 #'
 #' @rdname Idents
@@ -4733,7 +4621,6 @@ VariableFeatures.Seurat <- function(object, assay = NULL, selection.method = NUL
   return(object)
 }
 
-#' @inheritParams VariableFeatures.Seurat
 #'
 #' @rdname VariableFeatures
 #' @export
@@ -4930,7 +4817,6 @@ WhichCells.Seurat <- function(
 #' @param overwrite Overwrite existing file
 #'
 #' @importFrom methods slot
-#' @importFrom reticulate py_module_available import tuple np_array dict
 #'
 #' @rdname h5ad
 #' @export
@@ -5339,7 +5225,7 @@ WriteH5AD.Seurat <- function(
   return(Loadings(object = x)[i, j, drop = drop, ...])
 }
 
-#' @inheritParams subset.Seurat
+#' 
 #'
 #' @rdname subset.Seurat
 #' @export
@@ -6536,16 +6422,6 @@ setMethod(
       dims = dims,
       ...
     ))
-  }
-)
-
-setMethod(
-  f = 'show',
-  signature = 'AnchorSet',
-  definition = function(object) {
-    cat('An AnchorSet object containing', nrow(x = slot(object = object, name = "anchors")),
-        "anchors between", length(x = slot(object = object, name = "object.list")), "Seurat objects \n",
-        "This can be used as input to IntegrateData or TransferData.")
   }
 )
 
