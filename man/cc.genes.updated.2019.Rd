@@ -4,11 +4,13 @@
 \name{cc.genes.updated.2019}
 \alias{cc.genes.updated.2019}
 \title{Cell cycle genes: 2019 update}
-\format{A list of two vectors
+\format{
+A list of two vectors
 \describe{
   \item{s.genes}{Genes associated with S-phase}
   \item{g2m.genes}{Genes associated with G2M-phase}
-}}
+}
+}
 \source{
 \url{http://science.sciencemag.org/content/352/6282/189}
 }
@@ -39,14 +41,6 @@ The following symbols were updated from \code{\link{cc.genes}}
 }
 }
 
-\examples{
-\dontrun{
-cc.genes.updated.2019 <- cc.genes
-cc.genes.updated.2019$s.genes <- UpdateSymbolList(symbols = cc.genes.updated.2019$s.genes)
-cc.genes.updated.2019$g2m.genes <- UpdateSymbolList(symbols = cc.genes.updated.2019$g2m.genes)
-}
-
-}
 \seealso{
 \code{\link{cc.genes}}
 }

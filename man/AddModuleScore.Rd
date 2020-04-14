@@ -13,9 +13,7 @@ AddModuleScore(
   k = FALSE,
   assay = NULL,
   name = "Cluster",
-  seed = 1,
-  search = FALSE,
-  ...
+  seed = 1
 )
 }
 \arguments{
@@ -36,12 +34,6 @@ AddModuleScore(
 \item{name}{Name for the expression programs}
 
 \item{seed}{Set a random seed. If NULL, seed is not set.}
-
-\item{search}{Search for symbol synonyms for features in \code{features} that
-don't match features in \code{object}? Searches the HGNC's gene names database;
-see \code{\link{UpdateSymbolList}} for more details}
-
-\item{...}{Extra parameters passed to \code{\link{UpdateSymbolList}}}
 }
 \value{
 Returns a Seurat object with module scores added to object meta data

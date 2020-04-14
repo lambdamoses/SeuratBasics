@@ -43,13 +43,6 @@
 #'
 #' @seealso \code{\link{cc.genes}}
 #'
-#' @examples
-#' \dontrun{
-#' cc.genes.updated.2019 <- cc.genes
-#' cc.genes.updated.2019$s.genes <- UpdateSymbolList(symbols = cc.genes.updated.2019$s.genes)
-#' cc.genes.updated.2019$g2m.genes <- UpdateSymbolList(symbols = cc.genes.updated.2019$g2m.genes)
-#' }
-#'
 "cc.genes.updated.2019"
 
 #' A small example version of the PBMC dataset

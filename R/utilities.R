@@ -22,10 +22,6 @@ NULL
 #' @param assay Name of assay to use
 #' @param name Name for the expression programs
 #' @param seed Set a random seed. If NULL, seed is not set.
-#' @param search Search for symbol synonyms for features in \code{features} that
-#' don't match features in \code{object}? Searches the HGNC's gene names database;
-#' see \code{\link{UpdateSymbolList}} for more details
-#' @param ... Extra parameters passed to \code{\link{UpdateSymbolList}}
 #'
 #' @return Returns a Seurat object with module scores added to object meta data
 #'
@@ -73,9 +69,7 @@ AddModuleScore <- function(
   k = FALSE,
   assay = NULL,
   name = 'Cluster',
-  seed = 1,
-  search = FALSE,
-  ...
+  seed = 1
 ) {
   if (!is.null(x = seed)) {
     set.seed(seed = seed)
@@ -104,42 +98,9 @@ AddModuleScore <- function(
           warning(
             "The following features are not present in the object: ",
             paste(missing.features, collapse = ", "),
-            ifelse(
-              test = search,
-              yes = ", attempting to find updated synonyms",
-              no = ", not searching for symbol synonyms"
-            ),
             call. = FALSE,
             immediate. = TRUE
           )
-          if (search) {
-            tryCatch(
-              expr = {
-                updated.features <- UpdateSymbolList(symbols = missing.features, ...)
-                names(x = updated.features) <- missing.features
-                for (miss in names(x = updated.features)) {
-                  index <- which(x == miss)
-                  x[index] <- updated.features[miss]
-                }
-              },
-              error = function(...) {
-                warning(
-                  "Could not reach HGNC's gene names database",
-                  call. = FALSE,
-                  immediate. = TRUE
-                )
-              }
-            )
-            missing.features <- setdiff(x = x, y = rownames(x = object))
-            if (length(x = missing.features) > 0) {
-              warning(
-                "The following features are still not present in the object: ",
-                paste(missing.features, collapse = ", "),
-                call. = FALSE,
-                immediate. = TRUE
-              )
-            }
-          }
         }
         return(intersect(x = x, y = rownames(x = object)))
       }
@@ -468,7 +429,7 @@ CellCycleScoring <- function(
   return(object)
 }
 
-#' Slim down a multi-species expression matrix, when only one species is primarily of interenst.
+#' Slim down a multi-species expression matrix, when only one species is primarily of interest.
 #'
 #' Valuable for CITE-seq analyses, where we typically spike in rare populations of 'negative control' cells from a different species.
 #'
@@ -575,243 +536,6 @@ ExpMean <- function(x, ...) {
   }
 }
 
-#' Export Seurat object for UCSC cell browser
-#'
-#' @param object Seurat object
-#' @param dir path to directory where to save exported files. These are:
-#' exprMatrix.tsv, tsne.coords.tsv, meta.tsv, markers.tsv and a default cellbrowser.conf
-#' @param dataset.name name of the dataset. Defaults to Seurat project name
-#' @param reductions vector of reduction names to export
-#' @param markers.file path to file with marker genes
-#' @param cluster.field name of the metadata field containing cell cluster
-#' @param cb.dir path to directory where to create UCSC cellbrowser static
-#' website content root, e.g. an index.html, .json files, etc. These files
-#' can be copied to any webserver. If this is specified, the cellbrowser
-#' package has to be accessible from R via reticulate.
-#' @param port on which port to run UCSC cellbrowser webserver after export
-#' @param skip.expr.matrix whether to skip exporting expression matrix
-#' @param skip.metadata whether to skip exporting metadata
-#' @param skip.reductions whether to skip exporting reductions
-#' @param ... specifies the metadata fields to export. To supply field with
-#' human readable name, pass name as \code{field="name"} parameter.
-#'
-#' @return This function exports Seurat object as a set of tsv files
-#' to \code{dir} directory, copying the \code{markers.file} if it is
-#' passed. It also creates the default \code{cellbrowser.conf} in the
-#' directory. This directory could be read by \code{cbBuild} to
-#' create a static website viewer for the dataset. If \code{cb.dir}
-#' parameter is passed, the function runs \code{cbBuild} (if it is
-#' installed) to create this static website in \code{cb.dir} directory.
-#' If \code{port} parameter is passed, it also runs the webserver for
-#' that directory and opens a browser.
-#'
-#' @author Maximilian Haeussler, Nikolay Markov
-#'
-#' @importFrom utils browseURL
-#' @importFrom reticulate py_module_available import
-#' @importFrom tools file_ext
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' ExportToCellbrowser(object = pbmc_small, dataset.name = "PBMC", dir = "out")
-#' }
-#'
-ExportToCellbrowser <- function(
-  object,
-  dir,
-  dataset.name = Project(object = object),
-  reductions = "tsne",
-  markers.file = NULL,
-  cluster.field = "Cluster",
-  cb.dir = NULL,
-  port = NULL,
-  skip.expr.matrix = FALSE,
-  skip.metadata = FALSE,
-  skip.reductions = FALSE,
-  ...
-) {
-  vars <- c(...)
-  if (is.null(x = vars)) {
-    vars <- c("nCount_RNA", "nFeature_RNA")
-    if (length(x = levels(x = Idents(object = object))) > 1) {
-      vars <- c(vars, cluster.field)
-      names(x = vars) <- c("", "", "ident")
-    }
-  }
-  names(x = vars) <- names(x = vars) %||% vars
-  names(x = vars) <- sapply(
-    X = 1:length(x = vars),
-    FUN = function(i) {
-      return(ifelse(
-        test = nchar(x = names(x = vars)[i]) > 0,
-        yes = names(x = vars[i]),
-        no = vars[i]
-      ))
-    }
-  )
-  if (!is.null(x = port) && is.null(x = cb.dir)) {
-    stop("cb.dir parameter is needed when port is set")
-  }
-  if (!dir.exists(paths = dir)) {
-    dir.create(path = dir)
-  }
-  if (!dir.exists(paths = dir)) {
-    stop("Output directory ", dir, " cannot be created or is a file")
-  }
-  if (dataset.name == "SeuratProject") {
-    warning("Using default project name means that you may overwrite project with the same name in the cellbrowser html output folder")
-  }
-  order <- colnames(x = object)
-  enum.fields <- c()
-  # Export expression matrix:
-  if (!skip.expr.matrix) {
-    # Relatively memory inefficient - maybe better to convert to sparse-row and write in a loop, row-by-row?
-    df <- as.data.frame(x = as.matrix(x = GetAssayData(object = object)))
-    df <- data.frame(gene = rownames(x = object), df, check.names = FALSE)
-    gzPath <- file.path(dir, "exprMatrix.tsv.gz")
-    z <- gzfile(gzPath, "w")
-    message("Writing expression matrix to ", gzPath)
-    write.table(x = df, sep = "\t", file = z, quote = FALSE, row.names = FALSE)
-    close(con = z)
-  }
-  # Export cell embeddings
-  embeddings.conf <- c()
-  for (reduction in reductions) {
-    if (!skip.reductions) {
-      df <- Embeddings(object = object, reduction = reduction)
-      if (ncol(x = df) > 2) {
-        warning(
-          'Embedding ',
-          reduction,
-          ' has more than 2 coordinates, taking only the first 2'
-        )
-        df <- df[, 1:2]
-      }
-      colnames(x = df) <- c("x", "y")
-      df <- data.frame(cellId = rownames(x = df), df)
-      fname <- file.path(dir, paste0(reduction, '.coords.tsv'))
-      message("Writing embeddings to ", fname)
-      write.table(
-        x = df[order, ],
-        sep = "\t",
-        file = fname,
-        quote = FALSE,
-        row.names = FALSE
-      )
-    }
-    conf <- sprintf(
-      '{"file": "%s.coords.tsv", "shortLabel": "Seurat %1$s"}',
-      reduction
-    )
-    embeddings.conf <- c(embeddings.conf, conf)
-  }
-  # Export metadata
-  df <- data.frame(row.names = rownames(x = object[[]]))
-  df <- FetchData(object = object, vars = names(x = vars))
-  colnames(x = df) <- vars
-  enum.fields <- Filter(
-    f = function(name) {!is.numeric(x = df[[name]])},
-    x = vars
-  )
-  if (!skip.metadata) {
-    fname <- file.path(dir, "meta.tsv")
-    message("Writing meta data to ", fname)
-    df <- data.frame(Cell = rownames(x = df), df, check.names = FALSE)
-    write.table(
-      x = df[order, ],
-      sep = "\t",
-      file = fname,
-      quote = FALSE,
-      row.names = FALSE
-    )
-  }
-  # Export markers
-  markers.string <- ''
-  if (!is.null(x = markers.file)) {
-    ext <- file_ext(x = markers.file)
-    fname <- paste0("markers.", ext)
-    file.copy(from = markers.file, to = file.path(dir, fname))
-    markers.string <- sprintf(
-      'markers = [{"file": "%s", "shortLabel": "Seurat Cluster Markers"}]',
-      fname
-    )
-  }
-  config <- c(
-    'name="%s"',
-    'shortLabel="%1$s"',
-    'exprMatrix="exprMatrix.tsv.gz"',
-    '#tags = ["10x", "smartseq2"]',
-    'meta="meta.tsv"',
-    '# possible values: "gencode-human", "gencode-mouse", "symbol" or "auto"',
-    'geneIdType="auto"',
-    'clusterField="%s"',
-    'labelField="%2$s"',
-    'enumFields=%s',
-    '%s',
-    'coords=%s'
-  )
-  config <- paste(config, collapse = '\n')
-  enum.string <- paste0(
-    "[",
-    paste(paste0('"', enum.fields, '"'), collapse = ", "),
-    "]"
-  )
-  coords.string <- paste0(
-    "[",
-    paste(embeddings.conf, collapse = ",\n"),
-    "]"
-  )
-  config <- sprintf(
-    config,
-    dataset.name,
-    cluster.field,
-    enum.string,
-    markers.string,
-    coords.string
-  )
-  fname <- file.path(dir, "cellbrowser.conf")
-  if (file.exists(fname)) {
-    message(
-      "`cellbrowser.conf` already exists in target directory, refusing to ",
-      "overwrite it"
-    )
-  } else {
-    cat(config, file = fname)
-  }
-  message("Prepared cellbrowser directory ", dir)
-  if (!is.null(x = cb.dir)) {
-    if (!py_module_available(module = "cellbrowser")) {
-      stop(
-        "The Python package `cellbrowser` is required to prepare and run ",
-        "Cellbrowser. Please install it ",
-        "on the Unix command line with `sudo pip install cellbrowser` (if root) ",
-        "or `pip install cellbrowser --user` (as a non-root user). ",
-        "To adapt the Python that is used, you can either set the env. variable RETICULATE_PYTHON ",
-        "or do `require(reticulate) and use one of these functions: use_python(), use_virtualenv(), use_condaenv(). ",
-        "See https://rstudio.github.io/reticulate/articles/versions.html; ",
-        "at the moment, R's reticulate is using this Python: ",
-        import(module = 'sys')$executable,
-        ". "
-      )
-    }
-    if (!is.null(x = port)) {
-      port <- as.integer(x = port)
-    }
-    message("Converting cellbrowser directory to html/json files")
-    cb <- import(module = "cellbrowser")
-    cb$cellbrowser$build(dir, cb.dir)
-    if (!is.null(port)) {
-      message("Starting http server")
-      cb$cellbrowser$stop()
-      cb$cellbrowser$serve(cb.dir, port)
-      Sys.sleep(time = 0.4)
-      browseURL(url = paste0("http://localhost:", port))
-    }
-  }
-}
-
 #' Calculate the standard deviation of logged values
 #'
 #' Calculate SD of logged values in non-log space (return answer in log-space)
@@ -849,128 +573,6 @@ ExpSD <- function(x) {
 #'
 ExpVar <- function(x) {
   return(log1p(x = var(x = expm1(x = x))))
-}
-
-#' Get updated synonyms for gene symbols
-#'
-#' Find current gene symbols based on old or alias symbols using the gene
-#' names database from the HUGO Gene Nomenclature Committee (HGNC)
-#'
-#' @details For each symbol passed, we query the HGNC gene names database for
-#' current symbols that have the provided symbol as either an alias
-#' (\code{alias_symbol}) or old (\code{prev_symbol}) symbol. All other queries
-#' are \strong{not} supported.
-#'
-#' @note This function requires internet access
-#'
-#' @param symbols A vector of gene symbols
-#' @param timeout Time to wait before cancelling query in seconds
-#' @param several.ok Allow several current gene sybmols for each provided symbol
-#' @param verbose Show a progress bar depicting search progress
-#' @param ... Extra parameters passed to \code{\link[httr]{GET}}
-#'
-#' @return For \code{GeneSymbolThesarus}, if \code{several.ok}, a named list
-#' where each entry is the current symbol found for each symbol provided and the
-#' names are the provided symbols. Otherwise, a named vector with the same information.
-#'
-#' @source \url{https://www.genenames.org/} \url{http://rest.genenames.org/}
-#'
-#' @importFrom utils txtProgressBar setTxtProgressBar
-#' @importFrom httr GET accept_json timeout status_code content
-#'
-#' @rdname UpdateSymbolList
-#' @name UpdateSymbolList
-#'
-#' @export
-#'
-#' @seealso \code{\link[httr]{GET}}
-#'
-#' @examples
-#' \dontrun{
-#' GeneSybmolThesarus(symbols = c("FAM64A"))
-#' }
-#'
-GeneSymbolThesarus <- function(
-  symbols,
-  timeout = 10,
-  several.ok = FALSE,
-  verbose = TRUE,
-  ...
-) {
-  db.url <- 'http://rest.genenames.org/fetch'
-  search.types <- c('alias_symbol', 'prev_symbol')
-  synonyms <- vector(mode = 'list', length = length(x = symbols))
-  not.found <- vector(mode = 'logical', length = length(x = symbols))
-  multiple.found <- vector(mode = 'logical', length = length(x = symbols))
-  names(x = multiple.found) <- names(x = not.found) <- names(x = synonyms) <- symbols
-  if (verbose) {
-    pb <- txtProgressBar(max = length(x = symbols), style = 3, file = stderr())
-  }
-  for (symbol in symbols) {
-    sym.syn <- character()
-    for (type in search.types) {
-      response <- GET(
-        url = paste(db.url, type, symbol, sep = '/'),
-        config = c(accept_json(), timeout(seconds = timeout)),
-        ...
-      )
-      if (!identical(x = status_code(x = response), y = 200L)) {
-        next
-      }
-      response <- content(x = response)
-      if (response$response$numFound != 1) {
-        if (response$response$numFound > 1) {
-          warning(
-            "Multiple hits found for ",
-            symbol,
-            " as ",
-            type,
-            ", skipping",
-            call. = FALSE,
-            immediate. = TRUE
-          )
-        }
-        next
-      }
-      sym.syn <- c(sym.syn, response$response$docs[[1]]$symbol)
-    }
-    not.found[symbol] <- length(x = sym.syn) < 1
-    multiple.found[symbol] <- length(x = sym.syn) > 1
-    if (length(x = sym.syn) == 1 || (length(x = sym.syn) > 1 && several.ok)) {
-      synonyms[[symbol]] <- sym.syn
-    }
-    if (verbose) {
-      setTxtProgressBar(pb = pb, value = pb$getVal() + 1)
-    }
-  }
-  if (verbose) {
-    close(con = pb)
-  }
-  if (sum(not.found) > 0) {
-    warning(
-      "The following symbols had no synonyms: ",
-      paste(names(x = which(x = not.found)), collapse = ', '),
-      call. = FALSE,
-      immediate. = TRUE
-    )
-  }
-  if (sum(multiple.found) > 0) {
-    msg <- paste(
-      "The following symbols had multiple synonyms:",
-      paste(names(x = which(x = multiple.found)), sep = ', ')
-    )
-    if (several.ok) {
-      message(msg)
-      message("Including anyways")
-    } else {
-      warning(msg, call. = FALSE, immediate. = TRUE)
-    }
-  }
-  synonyms <- Filter(f = Negate(f = is.null), x = synonyms)
-  if (!several.ok) {
-    synonyms <- unlist(x = synonyms)
-  }
-  return(synonyms)
 }
 
 #' Calculate the variance to mean ratio of logged values
@@ -1192,73 +794,6 @@ RowMergeSparseMatrices <- function(mat1, mat2){
     colnames(x = mat2)
   ))
   return(new.mat)
-}
-
-#' Stop Cellbrowser web server
-#'
-#' @importFrom reticulate py_module_available
-#' @importFrom reticulate import
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' StopCellbrowser()
-#' }
-#'
-StopCellbrowser <- function() {
-  if (py_module_available(module = "cellbrowser")) {
-    cb <- import(module = "cellbrowser")
-    cb$cellbrowser$stop()
-  } else {
-    stop("The `cellbrowser` package is not available in the Python used by R's reticulate")
-  }
-}
-
-#' @rdname UpdateSymbolList
-#'
-#' @return For \code{UpdateSymbolList}, \code{symbols} with updated symbols from
-#' HGNC's gene names database
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' UpdateSymbolList(symbols = cc.genes$s.genes)
-#' }
-#'
-UpdateSymbolList <- function(
-  symbols,
-  timeout = 10,
-  several.ok = FALSE,
-  verbose = TRUE,
-  ...
-) {
-  new.symbols <- suppressWarnings(expr = GeneSymbolThesarus(
-    symbols = symbols,
-    timeout = timeout,
-    several.ok = several.ok,
-    verbose = verbose,
-    ...
-  ))
-  if (length(x = new.symbols) < 1) {
-    warning("No updated symbols found", call. = FALSE, immediate. = TRUE)
-  } else {
-    if (verbose) {
-      message("Found updated symbols for ", length(x = new.symbols), " symbols")
-      x <- sapply(X = new.symbols, FUN = paste, collapse = ', ')
-      message(paste(names(x = x), x, sep = ' -> ', collapse = '\n'))
-    }
-    for (sym in names(x = new.symbols)) {
-      index <- which(x = symbols == sym)
-      symbols <- append(
-        x = symbols[-index],
-        values = new.symbols[[sym]],
-        after = index - 1
-      )
-    }
-  }
-  return(symbols)
 }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
