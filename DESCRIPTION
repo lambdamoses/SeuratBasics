@@ -28,10 +28,7 @@ Depends:
     R (>= 3.4.0),
     methods,
 Imports:
-    ape,
-    cluster,
     cowplot,
-    fitdistrplus,
     future,
     future.apply,
     ggplot2 (>= 3.0.0),
@@ -40,34 +37,24 @@ Imports:
     graphics,
     grDevices,
     grid,
-    httr,
-    ica,
     igraph,
     irlba,
-    KernSmooth,
-    leiden (>= 0.3.1),
     lmtest,
     MASS,
     Matrix (>= 1.2-14),
-    metap,
     patchwork,
     pbapply,
-    plotly,
     png,
     RANN,
     RColorBrewer,
     Rcpp,
-    RcppAnnoy,
-    reticulate,
     rlang,
     ROCR,
-    rsvd,
     Rtsne,
     scales,
     sctransform (>= 0.2.0),
     stats,
     tools,
-    tsne,
     utils,
     uwot (>= 0.1.5)
 LinkingTo: Rcpp (>= 0.11.0), RcppEigen, RcppProgress
@@ -82,17 +69,19 @@ Collate:
     'data.R'
     'differential_expression.R'
     'dimensional_reduction.R'
-    'integration.R'
     'objects.R'
     'preprocessing.R'
-    'tree.R'
     'utilities.R'
     'zzz.R'
-RoxygenNote: 7.0.2
+RoxygenNote: 7.1.0
 Encoding: UTF-8
 biocViews:
 Suggests:
+    cluster,
+    fitdistrplus,
+    KernSmooth,
     loomR,
+    leidenbase,
     SDMTools,
     testthat,
     hdf5r,
@@ -105,7 +94,6 @@ Suggests:
     GenomicRanges,
     GenomeInfoDb,
     IRanges,
-    rtracklayer,
     monocle,
     Biobase,
     VGAM
