@@ -136,57 +136,6 @@ JackStraw <- function(
   return(object)
 }
 
-#' L2-normalization
-#'
-#' Perform l2 normalization on given dimensional reduction
-#'
-#' @param object Seurat object
-#' @param reduction Dimensional reduction to normalize
-#' @param new.dr name of new dimensional reduction to store
-#' (default is olddr.l2)
-#' @param new.key name of key for new dimensional reduction
-#'
-#' @return Returns a \code{\link{Seurat}} object
-#'
-#' @export
-#'
-L2Dim <- function(object, reduction, new.dr = NULL, new.key = NULL) {
-  l2.norm <- L2Norm(mat = Embeddings(object[[reduction]]))
-  if(is.null(new.dr)){
-    new.dr <- paste0(reduction, ".l2")
-  }
-  if(is.null(new.key)){
-    new.key <- paste0("L2", Key(object[[reduction]]))
-  }
-  colnames(x = l2.norm) <- paste0(new.key, 1:ncol(x = l2.norm))
-  l2.dr <- CreateDimReducObject(
-    embeddings = l2.norm,
-    loadings = Loadings(object = object[[reduction]], projected = FALSE),
-    projected = Loadings(object = object[[reduction]], projected = TRUE),
-    assay = DefaultAssay(object = object),
-    stdev = slot(object = object[[reduction]], name = 'stdev'),
-    key = new.key,
-    jackstraw = slot(object = object[[reduction]], name = 'jackstraw'),
-    misc = slot(object = object[[reduction]], name = 'misc')
-  )
-  object[[new.dr]] <- l2.dr
-  return(object)
-}
-
-#' L2-Normalize CCA
-#'
-#' Perform l2 normalization on CCs
-#'
-#' @param object Seurat object
-#' @param \dots Additional parameters to L2Dim.
-#'
-#' @export
-#'
-L2CCA <- function(object, ...){
-  CheckDots(..., fxns = 'L2Dim')
-  return(L2Dim(object = object, reduction = "cca", ...))
-}
-
 #' Significant genes from a PCA
 #'
 #' Returns a set of genes, based on the JackStraw analysis, that have
@@ -310,457 +259,6 @@ ProjectDim <- function(
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Methods for Seurat-defined generics
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-#' @param standardize Standardize matrices - scales columns to have unit variance
-#' and mean 0
-#' @param num.cc Number of canonical vectors to calculate
-#' @param seed.use Random seed to set. If NULL, does not set a seed
-#' @param verbose Show progress messages
-#'
-#' @importFrom irlba irlba
-#'
-#' @rdname RunCCA
-#' @export
-#'
-RunCCA.default <- function(
-  object1,
-  object2,
-  standardize = TRUE,
-  num.cc = 20,
-  seed.use = 42,
-  verbose = FALSE,
-  ...
-) {
-  if (!is.null(x = seed.use)) {
-    set.seed(seed = seed.use)
-  }
-  cells1 <- colnames(x = object1)
-  cells2 <- colnames(x = object2)
-  if (standardize) {
-    object1 <- Standardize(mat = object1, display_progress = FALSE)
-    object2 <- Standardize(mat = object2, display_progress = FALSE)
-  }
-  mat3 <- crossprod(x = object1, y = object2)
-  cca.svd <- irlba(A = mat3, nv = num.cc)
-  cca.data <- rbind(cca.svd$u, cca.svd$v)
-  colnames(x = cca.data) <- paste0("CC", 1:num.cc)
-  rownames(cca.data) <- c(cells1, cells2)
-  cca.data <- apply(
-    X = cca.data,
-    MARGIN = 2,
-    FUN = function(x) {
-      if (sign(x[1]) == -1) {
-        x <- x * -1
-      }
-      return(x)
-    }
-  )
-  return(list(ccv = cca.data, d = cca.svd$d))
-}
-
-#' @param assay1,assay2 Assays to pull from in the first and second objects, respectively
-#' @param features Set of genes to use in CCA. Default is the union of both
-#' the variable features sets present in both objects.
-#' @param renormalize Renormalize raw data after merging the objects. If FALSE,
-#' merge the data matrices also.
-#' @param rescale Rescale the datasets prior to CCA. If FALSE, uses existing data in the scale data slots.
-#' @param compute.gene.loadings Also compute the gene loadings. NOTE - this will
-#' scale every gene in the dataset which may impose a high memory cost.
-#' @param add.cell.id1,add.cell.id2 Add ...
-#' @param ... Extra parameters (passed onto MergeSeurat in case with two objects
-#' passed, passed onto ScaleData in case with single object and rescale.groups
-#' set to TRUE)
-#'
-#' @rdname RunCCA
-#' @export
-#' @method RunCCA Seurat
-#'
-RunCCA.Seurat <- function(
-  object1,
-  object2,
-  assay1 = NULL,
-  assay2 = NULL,
-  num.cc = 20,
-  features = NULL,
-  renormalize = FALSE,
-  rescale = FALSE,
-  compute.gene.loadings = TRUE,
-  add.cell.id1 = NULL,
-  add.cell.id2 = NULL,
-  verbose = TRUE,
-  ...
-) {
-  assay1 <- assay1 %||% DefaultAssay(object = object1)
-  assay2 <- assay2 %||% DefaultAssay(object = object2)
-  if (assay1 != assay2) {
-    warning("Running CCA on different assays")
-  }
-  if (is.null(x = features)) {
-    if (length(x = VariableFeatures(object = object1, assay = assay1)) == 0) {
-      stop(paste0("VariableFeatures not computed for the ", assay1, " assay in object1"))
-    }
-    if (length(x = VariableFeatures(object = object2, assay = assay2)) == 0) {
-      stop(paste0("VariableFeatures not computed for the ", assay2, " assay in object2"))
-    }
-    features <- union(x = VariableFeatures(object = object1), y = VariableFeatures(object = object2))
-    if (length(x = features) == 0) {
-      stop("Zero features in the union of the VariableFeature sets ")
-    }
-  }
-  nfeatures <- length(x = features)
-  if (!(rescale)) {
-    data.use1 <- GetAssayData(object = object1, assay = assay1, slot = "scale.data")
-    data.use2 <- GetAssayData(object = object2, assay = assay2, slot = "scale.data")
-    features <- CheckFeatures(data.use = data.use1, features = features, object.name = "object1", verbose = FALSE)
-    features <- CheckFeatures(data.use = data.use2, features = features, object.name = "object2", verbose = FALSE)
-    data1 <- data.use1[features, ]
-    data2 <- data.use2[features, ]
-  }
-  if (rescale) {
-    data.use1 <- GetAssayData(object = object1, assay = assay1, slot = "data")
-    data.use2 <- GetAssayData(object = object2, assay = assay2, slot = "data")
-    features <- CheckFeatures(data.use = data.use1, features = features, object.name = "object1", verbose = FALSE)
-    features <- CheckFeatures(data.use = data.use2, features = features, object.name = "object2", verbose = FALSE)
-    data1 <- data.use1[features,]
-    data2 <- data.use2[features,]
-    if (verbose) message("Rescaling groups")
-    data1 <- FastRowScale(as.matrix(data1))
-    dimnames(data1) <- list(features, colnames(x = object1))
-    data2 <- FastRowScale(as.matrix(data2))
-    dimnames(data2) <- list(features, colnames(x = object2))
-  }
-  if (length(x = features) / nfeatures < 0.1 & verbose) {
-    warning("More than 10% of provided features filtered out. Please check that the given features are present in the scale.data slot for both the assays provided here and that they have non-zero variance.")
-  }
-  if (length(x = features) < 50) {
-    warning("Fewer than 50 features used as input for CCA.")
-  }
-  if (verbose) {
-    message("Running CCA")
-  }
-  cca.results <- RunCCA(
-    object1 = data1,
-    object2 = data2,
-    standardize = TRUE,
-    num.cc = num.cc,
-    verbose = verbose,
-  )
-  if (verbose) {
-    message("Merging objects")
-  }
-  combined.object <- merge(
-    x = object1,
-    y = object2,
-    merge.data = TRUE,
-    ...
-  )
-  combined.object[['cca']] <- CreateDimReducObject(
-    embeddings = cca.results$ccv[colnames(combined.object), ],
-    assay = assay1,
-    key = "CC_"
-  )
-  combined.object[['cca']]@assay.used <- DefaultAssay(combined.object)
-  if (ncol(combined.object) != (ncol(object1) + ncol(object2))) {
-    warning("Some cells removed after object merge due to minimum feature count cutoff")
-  }
-  combined.scale <- cbind(data1,data2)
-  combined.object <- SetAssayData(object = combined.object,new.data = combined.scale, slot = "scale.data")
-  if (renormalize) {
-    combined.object <- NormalizeData(
-      object = combined.object,
-      assay = assay1,
-      normalization.method = object1[[paste0("NormalizeData.", assay1)]]$normalization.method,
-      scale.factor = object1[[paste0("NormalizeData.", assay1)]]$scale.factor
-    )
-  }
-  if (compute.gene.loadings) {
-    combined.object <- ProjectDim(
-      object = combined.object,
-      reduction = "cca",
-      verbose = FALSE,
-      overwrite = TRUE)
-  }
-  return(combined.object)
-}
-
-#' @param assay Name of Assay ICA is being run on
-#' @param nics Number of ICs to compute
-#' @param rev.ica By default, computes the dimensional reduction on the cell x
-#' feature matrix. Setting to true will compute it on the transpose (feature x cell
-#' matrix).
-#' @param ica.function ICA function from ica package to run (options: icafast,
-#' icaimax, icajade)
-#' @param verbose Print the top genes associated with high/low loadings for
-#' the ICs
-#' @param ndims.print ICs to print genes for
-#' @param nfeatures.print Number of genes to print for each IC
-#' @param reduction.key dimensional reduction key, specifies the string before
-#' the number for the dimension names.
-#' @param seed.use Set a random seed.  Setting NULL will not set a seed.
-#' @param \dots Additional arguments to be passed to fastica
-#'
-#' @importFrom ica icafast icaimax icajade
-#'
-#' @rdname RunICA
-#' @export
-#' @method RunICA default
-#'
-RunICA.default <- function(
-  object,
-  assay = NULL,
-  nics = 50,
-  rev.ica = FALSE,
-  ica.function = "icafast",
-  verbose = TRUE,
-  ndims.print = 1:5,
-  nfeatures.print = 30,
-  reduction.name = "ica",
-  reduction.key = "ica_",
-  seed.use = 42,
-  ...
-) {
-  CheckDots(..., fxns = ica.function)
-  if (!is.null(x = seed.use)) {
-    set.seed(seed = seed.use)
-  }
-  nics <- min(nics, ncol(x = object))
-  ica.fxn <- eval(expr = parse(text = ica.function))
-  if (rev.ica) {
-    ica.results <- ica.fxn(object, nc = nics,...)
-    cell.embeddings <- ica.results$M
-  } else {
-    ica.results <- ica.fxn(t(x = object), nc = nics,...)
-    cell.embeddings <- ica.results$S
-  }
-  feature.loadings <- (as.matrix(x = object ) %*% as.matrix(x = cell.embeddings))
-  colnames(x = feature.loadings) <- paste0(reduction.key, 1:ncol(x = feature.loadings))
-  colnames(x = cell.embeddings) <- paste0(reduction.key, 1:ncol(x = cell.embeddings))
-  reduction.data <- CreateDimReducObject(
-    embeddings = cell.embeddings,
-    loadings = feature.loadings,
-    assay = assay,
-    key = reduction.key
-  )
-  if (verbose) {
-    print(x = reduction.data, dims = ndims.print, nfeatures = nfeatures.print)
-  }
-  return(reduction.data)
-}
-
-#' @param features Features to compute ICA on
-#'
-#' @rdname RunICA
-#' @export
-#' @method RunICA Assay
-#'
-RunICA.Assay <- function(
-  object,
-  assay = NULL,
-  features = NULL,
-  nics = 50,
-  rev.ica = FALSE,
-  ica.function = "icafast",
-  verbose = TRUE,
-  ndims.print = 1:5,
-  nfeatures.print = 30,
-  reduction.name = "ica",
-  reduction.key = "ica_",
-  seed.use = 42,
-  ...
-) {
-  data.use <- PrepDR(
-    object = object,
-    features = features,
-    verbose = verbose
-  )
-  reduction.data <- RunICA(
-    object = data.use,
-    assay = assay,
-    nics = nics,
-    rev.ica = rev.ica,
-    ica.function = ica.function,
-    verbose = verbose,
-    ndims.print = ndims.print,
-    nfeatures.print = nfeatures.print,
-    reduction.key = reduction.key,
-    seed.use = seed.use,
-    ...
-
-  )
-  return(reduction.data)
-}
-
-#' @param reduction.name dimensional reduction name
-#'
-#' @rdname RunICA
-#' @method RunICA Seurat
-#' @export
-#'
-RunICA.Seurat <- function(
-  object,
-  assay = NULL,
-  features = NULL,
-  nics = 50,
-  rev.ica = FALSE,
-  ica.function = "icafast",
-  verbose = TRUE,
-  ndims.print = 1:5,
-  nfeatures.print = 30,
-  reduction.name = "ica",
-  reduction.key = "IC_",
-  seed.use = 42,
-  ...
-) {
-  assay <- assay %||% DefaultAssay(object = object)
-  assay.data <- GetAssay(object = object, assay = assay)
-  reduction.data <- RunICA(
-    object = assay.data,
-    assay = assay,
-    features = features,
-    nics = nics,
-    rev.ica = rev.ica,
-    ica.function = ica.function,
-    verbose = verbose,
-    ndims.print = ndims.print,
-    nfeatures.print = nfeatures.print,
-    reduction.key = reduction.key,
-    seed.use = seed.use,
-    ...
-  )
-  object[[reduction.name]] <- reduction.data
-  object <- LogSeuratCommand(object = object)
-  return(object)
-}
-
-#' @param assay Which assay to use. If NULL, use the default assay
-#' @param n Number of singular values to compute
-#' @param reduction.key Key for dimension reduction object
-#' @param scale.max Clipping value for cell embeddings. Default (NULL) is no clipping.
-#' @param seed.use Set a random seed. By default, sets the seed to 42. Setting
-#' NULL will not set a seed.
-#' @param verbose Print messages
-#'
-#' @importFrom irlba irlba
-#'
-#' @rdname RunLSI
-#' @export
-RunLSI.default <- function(
-  object,
-  assay = NULL,
-  n = 50,
-  reduction.key = 'LSI_',
-  scale.max = NULL,
-  seed.use = 42,
-  verbose = TRUE,
-  ...
-) {
-  CheckDots(...)
-  if (!is.null(seed.use)) {
-    set.seed(seed = seed.use)
-  }
-  tf.idf <- TF.IDF(data = object, verbose = verbose)
-  tf.idf <- LogNorm(data = tf.idf, display_progress = verbose, scale_factor = 1e4)
-  colnames(x = tf.idf) <- colnames(x = object)
-  rownames(x = tf.idf) <- rownames(x = object)
-  n <- min(n, ncol(x = object) - 1)
-  if (verbose) {
-    message("Running SVD on TF-IDF matrix")
-  }
-  lsi <- irlba(A = t(tf.idf), nv = n)
-  feature.loadings <- lsi$v
-  sdev <- lsi$d / sqrt(max(1, nrow(x = object) - 1))
-  cell.embeddings <- lsi$u
-  if (verbose) {
-    message('Scaling cell embeddings')
-  }
-  embed.mean <- apply(X = cell.embeddings, MARGIN = 1, FUN = mean)
-  embed.sd <- apply(X = cell.embeddings, MARGIN = 1, FUN = sd)
-  norm.embeddings <- (cell.embeddings - embed.mean) / embed.sd
-  if (!is.null(x = scale.max)) {
-    norm.embeddings[norm.embeddings > scale.max] <- scale.max
-    norm.embeddings[norm.embeddings < -scale.max] <- -scale.max
-  }
-  rownames(x = feature.loadings) <- rownames(x = object)
-  colnames(x = feature.loadings) <- paste0(reduction.key, 1:n)
-  rownames(x = norm.embeddings) <- colnames(x = object)
-  colnames(x = norm.embeddings) <- paste0(reduction.key, 1:n)
-  reduction.data <- CreateDimReducObject(
-    embeddings = norm.embeddings,
-    loadings = feature.loadings,
-    assay = assay,
-    stdev = sdev,
-    key = reduction.key
-  )
-  return(reduction.data)
-}
-
-#' @param features Which features to use. If NULL, use variable features
-#'
-#' @rdname RunLSI
-#' @export
-#' @method RunLSI Assay
-RunLSI.Assay <- function(
-  object,
-  assay = NULL,
-  features = NULL,
-  n = 50,
-  reduction.key = 'LSI_',
-  scale.max = NULL,
-  verbose = TRUE,
-  ...
-) {
-  features <- features %||% VariableFeatures(object)
-  data.use <- GetAssayData(
-    object = object,
-    slot = 'counts'
-  )[features, ]
-  reduction.data <- RunLSI(
-    object = data.use,
-    assay = assay,
-    n = n,
-    reduction.key = reduction.key,
-    scale.max = scale.max,
-    verbose = verbose,
-    ...
-  )
-  return(reduction.data)
-}
-
-#' @param reduction.name Name for stored dimension reduction object. Default 'lsi'
-#' @examples
-#' lsi <- RunLSI(object = pbmc_small, n = 5)
-#'
-#' @rdname RunLSI
-#'
-#' @export
-#' @method RunLSI Seurat
-RunLSI.Seurat <- function(
-  object,
-  assay = NULL,
-  features = NULL,
-  n = 50,
-  reduction.key = 'LSI_',
-  reduction.name = 'lsi',
-  scale.max = NULL,
-  verbose = TRUE,
-  ...
-) {
-  assay <- assay %||% DefaultAssay(object)
-  assay.data <- GetAssay(object = object, assay = assay)
-  reduction.data <- RunLSI(
-    object = assay.data,
-    assay = assay,
-    features = features,
-    n = n,
-    reduction.key = reduction.key,
-    scale.max = scale.max,
-    verbose = verbose,
-    ...
-  )
-  object[[reduction.name]] <- reduction.data
-  object <- LogSeuratCommand(object = object)
-  return(object)
-}
 
 #' @param assay Name of Assay PCA is being run on
 #' @param npcs Total Number of PCs to compute and store (50 by default)
@@ -958,14 +456,10 @@ RunPCA.Seurat <- function(
 #' \item{FIt-SNE: }{Use the FFT-accelerated Interpolation-based t-SNE. Based on
 #' Kluger Lab code found here: https://github.com/KlugerLab/FIt-SNE}
 #' }
-#' @param add.iter If an existing tSNE has already been computed, uses the
-#' current tSNE to seed the algorithm and then adds additional iterations on top
-#' of this
 #' @param dim.embed The dimensional space of the resulting tSNE embedding
 #' (default is 2). For example, set to 3 for a 3d tSNE
 #' @param reduction.key dimensional reduction key, specifies the string before the number for the dimension names. tSNE_ by default
 #'
-#' @importFrom tsne tsne
 #' @importFrom Rtsne Rtsne
 #'
 #' @rdname RunTSNE
@@ -977,7 +471,6 @@ RunTSNE.matrix <- function(
   assay = NULL,
   seed.use = 1,
   tsne.method = "Rtsne",
-  add.iter = 0,
   dim.embed = 2,
   reduction.key = "tSNE_",
   ...
@@ -995,14 +488,6 @@ RunTSNE.matrix <- function(
     'FIt-SNE' = fftRtsne(X = object, dims = dim.embed, rand_seed = seed.use, ...),
     stop("Invalid tSNE method: please choose from 'Rtsne' or 'FIt-SNE'")
   )
-  if (add.iter > 0) {
-    tsne.data <- tsne(
-      X = object,
-      initial_config = as.matrix(x = tsne.data),
-      max_iter = add.iter,
-      ...
-    )
-  }
   colnames(x = tsne.data) <- paste0(reduction.key, 1:ncol(x = tsne.data))
   rownames(x = tsne.data) <- rownames(x = object)
   tsne.reduction <- CreateDimReducObject(
@@ -1027,7 +512,6 @@ RunTSNE.DimReduc <- function(
   dims = 1:5,
   seed.use = 1,
   tsne.method = "Rtsne",
-  add.iter = 0,
   dim.embed = 2,
   reduction.key = "tSNE_",
   ...
@@ -1050,7 +534,6 @@ RunTSNE.dist <- function(
   assay = NULL,
   seed.use = 1,
   tsne.method = "Rtsne",
-  add.iter = 0,
   dim.embed = 2,
   reduction.key = "tSNE_",
   ...
@@ -1083,7 +566,6 @@ RunTSNE.Seurat <- function(
   features = NULL,
   seed.use = 1,
   tsne.method = "Rtsne",
-  add.iter = 0,
   dim.embed = 2,
   distance.matrix = NULL,
   reduction.name = "tsne",
@@ -1097,7 +579,6 @@ RunTSNE.Seurat <- function(
       assay = DefaultAssay(object = object),
       seed.use = seed.use,
       tsne.method = tsne.method,
-      add.iter = add.iter,
       dim.embed = dim.embed,
       reduction.key = reduction.key,
       is_distance = TRUE,
@@ -1110,7 +591,6 @@ RunTSNE.Seurat <- function(
       dims = dims,
       seed.use = seed.use,
       tsne.method = tsne.method,
-      add.iter = add.iter,
       dim.embed = dim.embed,
       reduction.key = reduction.key,
       pca = FALSE,
@@ -1122,7 +602,6 @@ RunTSNE.Seurat <- function(
       assay = DefaultAssay(object = object),
       seed.use = seed.use,
       tsne.method = tsne.method,
-      add.iter = add.iter,
       dim.embed = dim.embed,
       reduction.key = reduction.key,
       pca = FALSE,
@@ -1136,7 +615,6 @@ RunTSNE.Seurat <- function(
   return(object)
 }
 
-#' @importFrom reticulate py_module_available py_set_seed import
 #' @importFrom uwot umap
 #' @importFrom future nbrOfWorkers
 #'
@@ -1147,7 +625,6 @@ RunTSNE.Seurat <- function(
 RunUMAP.default <- function(
   object,
   assay = NULL,
-  umap.method = 'uwot',
   n.neighbors = 30L,
   n.components = 2L,
   metric = 'cosine',
@@ -1173,79 +650,32 @@ RunUMAP.default <- function(
   if (!is.null(x = seed.use)) {
     set.seed(seed = seed.use)
   }
-  if (umap.method != 'umap-learn' && getOption('Seurat.warn.umap.uwot', TRUE)) {
+  if (metric == 'correlation') {
     warning(
-      "The default method for RunUMAP has changed from calling Python UMAP via reticulate to the R-native UWOT using the cosine metric",
-      "\nTo use Python UMAP via reticulate, set umap.method to 'umap-learn' and metric to 'correlation'",
-      "\nThis message will be shown once per session",
+      "UWOT does not implement the correlation metric, using cosine instead",
       call. = FALSE,
       immediate. = TRUE
     )
-    options(Seurat.warn.umap.uwot = FALSE)
+    metric <- 'cosine'
   }
-  umap.output <- switch(
-    EXPR = umap.method,
-    'umap-learn' = {
-      if (!py_module_available(module = 'umap')) {
-        stop("Cannot find UMAP, please install through pip (e.g. pip install umap-learn).")
-      }
-      if (!is.null(x = seed.use)) {
-        py_set_seed(seed = seed.use)
-      }
-      if (typeof(x = n.epochs) == "double") {
-        n.epochs <- as.integer(x = n.epochs)
-      }
-      umap_import <- import(module = "umap", delay_load = TRUE)
-      umap <- umap_import$UMAP(
-        n_neighbors = as.integer(x = n.neighbors),
-        n_components = as.integer(x = n.components),
-        metric = metric,
-        n_epochs = n.epochs,
-        learning_rate = learning.rate,
-        min_dist = min.dist,
-        spread = spread,
-        set_op_mix_ratio = set.op.mix.ratio,
-        local_connectivity = local.connectivity,
-        repulsion_strength = repulsion.strength,
-        negative_sample_rate = negative.sample.rate,
-        a = a,
-        b = b,
-        metric_kwds = metric.kwds,
-        angular_rp_forest = angular.rp.forest,
-        verbose = verbose
-      )
-      umap$fit_transform(as.matrix(x = object))
-    },
-    'uwot' = {
-      if (metric == 'correlation') {
-        warning(
-          "UWOT does not implement the correlation metric, using cosine instead",
-          call. = FALSE,
-          immediate. = TRUE
-        )
-        metric <- 'cosine'
-      }
-      umap(
-        X = object,
-        n_threads = nbrOfWorkers(),
-        n_neighbors = as.integer(x = n.neighbors),
-        n_components = as.integer(x = n.components),
-        metric = metric,
-        n_epochs = n.epochs,
-        learning_rate = learning.rate,
-        min_dist = min.dist,
-        spread = spread,
-        set_op_mix_ratio = set.op.mix.ratio,
-        local_connectivity = local.connectivity,
-        repulsion_strength = repulsion.strength,
-        negative_sample_rate = negative.sample.rate,
-        a = a,
-        b = b,
-        fast_sgd = uwot.sgd,
-        verbose = verbose
-      )
-    },
-    stop("Unknown umap method: ", umap.method, call. = FALSE)
+  umap.output <- umap(
+    X = object,
+    n_threads = nbrOfWorkers(),
+    n_neighbors = as.integer(x = n.neighbors),
+    n_components = as.integer(x = n.components),
+    metric = metric,
+    n_epochs = n.epochs,
+    learning_rate = learning.rate,
+    min_dist = min.dist,
+    spread = spread,
+    set_op_mix_ratio = set.op.mix.ratio,
+    local_connectivity = local.connectivity,
+    repulsion_strength = repulsion.strength,
+    negative_sample_rate = negative.sample.rate,
+    a = a,
+    b = b,
+    fast_sgd = uwot.sgd,
+    verbose = verbose
   )
   colnames(x = umap.output) <- paste0(reduction.key, 1:ncol(x = umap.output))
   if (inherits(x = object, what = 'dist')) {
@@ -1262,94 +692,6 @@ RunUMAP.default <- function(
   return(umap.reduction)
 }
 
-#' @importFrom reticulate py_module_available import
-#'
-#' @rdname RunUMAP
-#' @method RunUMAP Graph
-#' @export
-#'
-RunUMAP.Graph <- function(
-  object,
-  assay = NULL,
-  umap.method = 'umap-learn',
-  n.components = 2L,
-  metric = 'correlation',
-  n.epochs = 0L,
-  learning.rate = 1,
-  min.dist = 0.3,
-  spread = 1,
-  repulsion.strength = 1,
-  negative.sample.rate = 5L,
-  a = NULL,
-  b = NULL,
-  uwot.sgd = FALSE,
-  seed.use = 42L,
-  metric.kwds = NULL,
-  verbose = TRUE,
-  reduction.key = 'UMAP_',
-  ...
-) {
-  CheckDots(...)
-  if (umap.method != 'umap-learn') {
-    warning(
-      "Running UMAP on Graph objects is only supported using the umap-learn method",
-      call. = FALSE,
-      immediate. = TRUE
-    )
-  }
-  if (!py_module_available(module = 'umap')) {
-    stop("Cannot find UMAP, please install through pip (e.g. pip install umap-learn).")
-  }
-  if (!py_module_available(module = 'numpy')) {
-    stop("Cannot find numpy, please install through pip (e.g. pip install numpy).")
-  }
-  if (!py_module_available(module = 'sklearn')) {
-    stop("Cannot find sklearn, please install through pip (e.g. pip install scikit-learn).")
-  }
-  if (!py_module_available(module = 'scipy')) {
-    stop("Cannot find scipy, please install through pip (e.g. pip install scipy).")
-  }
-  np <- import("numpy", delay_load = TRUE)
-  sp <- import("scipy", delay_load = TRUE)
-  sklearn <- import("sklearn", delay_load = TRUE)
-  umap <- import("umap", delay_load = TRUE)
-  diag(x = object) <- 0
-  data <- object
-  object <- sp$sparse$coo_matrix(arg1 = object)
-  ab.params <- umap$umap_$find_ab_params(spread = spread, min_dist = min.dist)
-  a <- a %||% ab.params[[1]]
-  b <- b %||% ab.params[[2]]
-  n.epochs <- n.epochs %||% 0L
-  random.state <- sklearn$utils$check_random_state(seed = as.integer(x = seed.use))
-  embeddings <- umap$umap_$simplicial_set_embedding(
-    data = data,
-    graph = object,
-    n_components = n.components,
-    initial_alpha = learning.rate,
-    a = a,
-    b = b,
-    gamma = repulsion.strength,
-    negative_sample_rate = negative.sample.rate,
-    n_epochs = as.integer(x = n.epochs),
-    random_state = random.state,
-    init = "spectral",
-    metric = metric,
-    metric_kwds = metric.kwds,
-    verbose = verbose
-  )
-  rownames(x = embeddings) <- colnames(x = data)
-  colnames(x = embeddings) <- paste0("UMAP_", 1:n.components)
-  # center the embeddings on zero
-  embeddings <- scale(x = embeddings, scale = FALSE)
-  umap <- CreateDimReducObject(
-    embeddings = embeddings,
-    key = reduction.key,
-    assay = assay,
-    global = TRUE
-  )
-  return(umap)
-}
-
 #' @param dims Which dimensions to use as input features, used only if
 #' \code{features} is NULL
 #' @param reduction Which dimensional reduction (PCA or ICA) to use for the
@@ -1358,13 +700,7 @@ RunUMAP.Graph <- function(
 #' set of reduced dimensions). Not set (NULL) by default; \code{dims} must be NULL to run
 #' on features
 #' @param graph Name of graph on which to run UMAP
-#' @param assay Assay to pull data for when using \code{features}, or assay used to construct Graph
-#' if running UMAP on a Graph
-#' @param umap.method UMAP implementation to run. Can be
-#' \describe{
-#'   \item{\code{uwot}:}{Runs umap via the uwot R package}
-#'   \item{\code{umap-learn}:}{Run the Seurat wrapper of the python umap-learn package}
-#' }
+#' @param assay Assay to pull data for when using \code{features}.
 #' @param n.neighbors This determines the number of neighboring points used in
 #' local approximations of manifold structure. Larger values will result in more
 #' global structure being preserved at the loss of detailed local structure. In
@@ -1428,7 +764,6 @@ RunUMAP.Seurat <- function(
   features = NULL,
   graph = NULL,
   assay = 'RNA',
-  umap.method = 'uwot',
   n.neighbors = 30L,
   n.components = 2L,
   metric = 'cosine',
@@ -1488,7 +823,6 @@ RunUMAP.Seurat <- function(
   object[[reduction.name]] <- RunUMAP(
     object = data.use,
     assay = assay,
-    umap.method = umap.method,
     n.neighbors = n.neighbors,
     n.components = n.components,
     metric = metric,

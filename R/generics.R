@@ -155,7 +155,6 @@ DefaultAssay <- function(object, ...) {
   UseMethod(generic = 'DefaultAssay', object = object)
 }
 
-#' @inheritParams DefaultAssay
 #' @param value Name of assay to set as default
 #'
 #' @return An object with the new default assay
@@ -254,12 +253,6 @@ FindClusters <- function(object, ...) {
 #' # Take all cells in cluster 2, and find markers that separate cells in the 'g1' group (metadata
 #' # variable 'group')
 #' markers <- FindMarkers(pbmc_small, ident.1 = "g1", group.by = 'groups', subset.ident = "2")
-#' head(x = markers)
-#'
-#' # Pass 'clustertree' or an object of class phylo to ident.1 and
-#' # a node to ident.2 as a replacement for FindMarkersNode
-#' pbmc_small <- BuildClusterTree(object = pbmc_small)
-#' markers <- FindMarkers(object = pbmc_small, ident.1 = 'clustertree', ident.2 = 5)
 #' head(x = markers)
 #'
 #' @rdname FindMarkers
@@ -390,7 +383,7 @@ Idents <- function(object, ... ) {
   UseMethod(generic = 'Idents', object = object)
 }
 
-#' @inheritParams Idents
+#' 
 #' @param value The name of the identites to pull from object metadata or the identities themselves
 #'
 #' @return \code{Idents<-}: An object with the cell identites changed
@@ -449,7 +442,6 @@ JS <- function(object, ...) {
 
 #' Set JackStraw information
 #'
-#' @inherit JS
 #' @param value JackStraw information
 #'
 #' @rdname JS
@@ -473,7 +465,7 @@ Key <- function(object, ...) {
 
 #' Set a key
 #'
-#' @inheritParams Key
+#' 
 #' @param value Key value
 #'
 #' @rdname Key
@@ -497,7 +489,7 @@ Loadings <- function(object, ...) {
 
 #' Add feature loadings
 #'
-#' @inheritParams Loadings
+#' 
 #' @param value Feature loadings to add
 #'
 #' @rdname Loadings
@@ -523,7 +515,7 @@ Misc <- function(object, ...) {
 
 #' Set miscellaneous data
 #'
-#' @inheritParams Misc
+#' 
 #' @param value Data to add
 #'
 #' @return An object with miscellaneous data added
@@ -666,7 +658,7 @@ RenameCells <- function(object, ...) {
   UseMethod(generic = 'RenameCells', object = object)
 }
 
-#' @inheritParams Idents
+#' 
 #'
 #' @return \code{RenameIdents}: An object with selected identity classes renamed
 #'
@@ -685,7 +677,7 @@ RenameIdents <- function(object, ...) {
   UseMethod(generic = 'RenameIdents', object = object)
 }
 
-#' @inheritParams Idents
+#' 
 #' @param var Feature or variable to order on
 #'
 #' @return \code{ReorderIdent}: An object with
@@ -703,128 +695,6 @@ RenameIdents <- function(object, ...) {
 #'
 ReorderIdent <- function(object, var, ...) {
   UseMethod(generic = 'ReorderIdent', object = object)
-}
-
-#' Run Adaptively-thresholded Low Rank Approximation (ALRA)
-#'
-#' Runs ALRA, a method for imputation of dropped out values in scRNA-seq data.
-#' Computes the k-rank approximation to A_norm and adjusts it according to the
-#' error distribution learned from the negative values. Described in
-#' Linderman, G. C., Zhao, J., Kluger, Y. (2018). "Zero-preserving imputation
-#' of scRNA-seq data using low rank approximation." (bioRxiv:138677)
-#'
-#' @note RunALRA and associated functions are being moved to SeuratWrappers;
-#' for more information on SeuratWrappers, please see \url{https://github.com/satijalab/seurat-wrappers}
-#'
-#' @param object An object
-#' @param ... Arguments passed to other methods
-#'
-#' @rdname RunALRA
-#' @export RunALRA
-#'
-#' @author Jun Zhao, George Linderman
-#' @references Linderman, G. C., Zhao, J., Kluger, Y. (2018). "Zero-preserving imputation
-#' of scRNA-seq data using low rank approximation." (bioRxiv:138677)
-#' @seealso \code{\link{ALRAChooseKPlot}}
-#'
-#' @examples
-#' pbmc_small
-#' # Example 1: Simple usage, with automatic choice of k.
-#' pbmc_small_alra <- RunALRA(object = pbmc_small)
-#' \dontrun{
-#' # Example 2: Visualize choice of k, then run ALRA
-#' # First, choose K
-#' pbmc_small_alra <- RunALRA(pbmc_small, k.only=TRUE)
-#' # Plot the spectrum, spacings, and p-values which are used to choose k
-#' ggouts <- ALRAChooseKPlot(pbmc_small_alra)
-#' do.call(gridExtra::grid.arrange, c(ggouts, nrow=1))
-#' # Run ALRA with the chosen k
-#' pbmc_small_alra <- RunALRA(pbmc_small_alra)
-#' }
-#'
-RunALRA <- function(object, ...) {
-  .Deprecated(
-    new = 'SeruatWrappers::RunALRA',
-    msg = paste(
-      'RunALRA and associated functions are being moved to SeuratWrappers;',
-      'for more information on SeuratWrappers, please see https://github.com/satijalab/seurat-wrappers'
-    )
-  )
-  UseMethod(generic = 'RunALRA', object = object)
-}
-
-#' Perform Canonical Correlation Analysis
-#'
-#' Runs a canonical correlation analysis using a diagonal implementation of CCA.
-#' For details about stored CCA calculation parameters, see
-#' \code{PrintCCAParams}.
-#' @param object1 First Seurat object
-#' @param object2 Second Seurat object.
-# @param ... Arguments passed to other methods
-#'
-#' @return Returns a combined Seurat object with the CCA results stored.
-#'
-#' @seealso \code{\link{merge.Seurat}}
-#'
-#' @examples
-#' pbmc_small
-#' # As CCA requires two datasets, we will split our test object into two just for this example
-#' pbmc1 <- subset(pbmc_small, cells = colnames(pbmc_small)[1:40])
-#' pbmc2 <- subset(pbmc_small, cells = colnames(x = pbmc_small)[41:80])
-#' pbmc1[["group"]] <- "group1"
-#' pbmc2[["group"]] <- "group2"
-#' pbmc_cca <- RunCCA(object1 = pbmc1, object2 = pbmc2)
-#' # Print results
-#' print(x = pbmc_cca[["cca"]])
-#'
-#' @rdname RunCCA
-#' @export RunCCA
-#'
-RunCCA <- function(object1, object2, ...) {
-  UseMethod(generic = 'RunCCA', object = object1)
-}
-
-#' Run Independent Component Analysis on gene expression
-#'
-#' Run fastica algorithm from the ica package for ICA dimensionality reduction.
-#' For details about stored ICA calculation parameters, see
-#' \code{PrintICAParams}.
-#'
-#' @param object Seurat object
-#'
-#' @rdname RunICA
-#' @export RunICA
-#'
-RunICA <- function(object, ...) {
-  UseMethod(generic = "RunICA", object = object)
-}
-
-#' Run Latent Semantic Indexing on binary count matrix
-#'
-#' For details about stored LSI calculation parameters, see
-#' \code{PrintLSIParams}.
-#'
-#' @note RunLSI is being moved to Signac. Equivalent functionality can be
-#' achieved via the Signac::RunTFIDF and Signac::RunSVD functions;
-#' for more information on Signac, please see
-#' \url{https://github.com/timoast/Signac}
-#'
-#' @param object Seurat object
-#' @param ... Arguments passed to other methods
-#'
-#' @rdname RunLSI
-#' @export RunLSI
-#'
-RunLSI <- function(object, ...) {
-  .Deprecated(
-    new = 'Signac::RunTFIDF',
-    msg = paste(
-      "RunLSI is being moved to Signac. Equivalent functionality can be",
-      "achieved via the Signac::RunTFIDF and Signac::RunSVD functions; for",
-      "more information on Signac, please see https://github.com/timoast/Signac"
-    )
-  )
-  UseMethod(generic = "RunLSI", object = object)
 }
 
 #' Run Principal Component Analysis
@@ -1051,7 +921,7 @@ Tool <- function(object, ...) {
   UseMethod(generic = 'Tool', object = object)
 }
 
-#' @inheritParams Tool
+#' 
 #' @param value Information to be added to tool list
 #'
 #' @rdname Tool
@@ -1074,7 +944,6 @@ VariableFeatures <- function(object, ...) {
   UseMethod(generic = 'VariableFeatures', object = object)
 }
 
-#' @inheritParams VariableFeatures
 #' @param value A character vector of variable features
 #'
 #' @rdname VariableFeatures

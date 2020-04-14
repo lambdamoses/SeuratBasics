@@ -4,7 +4,6 @@
 \alias{DimPlot}
 \alias{TSNEPlot}
 \alias{PCAPlot}
-\alias{ICAPlot}
 \alias{UMAPPlot}
 \title{Dimensional reduction plot}
 \usage{
@@ -102,16 +101,12 @@ Graphs the output of a dimensional reduction technique on a 2D scatter plot wher
 cell and it's positioned based on the cell embeddings determined by the reduction technique. By
 default, cells are colored by their identity class (can be changed with the group.by parameter).
 }
-\note{
-For the old \code{do.hover} and \code{do.identify} functionality, please see
-\code{HoverLocator} and \code{CellSelector}, respectively.
-}
 \examples{
 DimPlot(object = pbmc_small)
 DimPlot(object = pbmc_small, split.by = 'ident')
 
 }
 \seealso{
-\code{\link{FeaturePlot}} \code{\link{HoverLocator}}
+\code{\link{FeaturePlot}} 
 \code{\link{CellSelector}} \code{\link{FetchData}}
 }
