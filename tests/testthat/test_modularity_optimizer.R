@@ -23,7 +23,7 @@ connections <- sparseMatrix(i = node2 + 1, j = node1 + 1, x = 1.0)
 test_that("Algorithm 1", {
   expected <- c(1, 1, 1, 1, 2, 2, 2, 1, 0, 1, 2, 1, 1, 1, 0, 0, 2, 1, 0, 1, 0, 1,
                0, 0, 3, 3, 0, 0, 3, 0, 0, 3, 0, 0)
-  s <- Seurat:::RunModularityClusteringCpp(
+  s <- SeuratBasics:::RunModularityClusteringCpp(
     SNN = connections,
     modularityFunction = 1,
     resolution = 1.0,
@@ -42,7 +42,7 @@ test_that("Algorithm 1", {
 test_that("Algorithm 2", {
   expected <- c(1, 1, 1, 1, 3, 3, 3, 1, 0, 0, 3, 1, 1, 1, 0, 0, 3, 1, 0, 1, 0, 1,
                0, 2, 2, 2, 0, 2, 2, 0, 0, 2, 0, 0)
-  s <- Seurat:::RunModularityClusteringCpp(
+  s <- SeuratBasics:::RunModularityClusteringCpp(
     SNN = connections,
     modularityFunction = 1,
     resolution = 1.0,
@@ -60,7 +60,7 @@ test_that("Algorithm 2", {
 test_that("Algorithm 3", {
   expected <- c(1, 1, 1, 1, 3, 3, 3, 1, 0, 0, 3, 1, 1, 1, 0, 0, 3, 1, 0, 1, 0, 1,
                0, 2, 2, 2, 0, 2, 2, 0, 0, 2, 0, 0)
-  s <- Seurat:::RunModularityClusteringCpp(
+  s <- SeuratBasics:::RunModularityClusteringCpp(
     SNN = connections,
     modularityFunction = 1,
     resolution = 1.0,
@@ -76,7 +76,7 @@ test_that("Algorithm 3", {
 test_that("Low Resolution", {
   e1 <- rep(0, 34)
   # java -jar ModularityOptimizer.jar karate_club_network.txt outjava.txt  1 0.05 3 1 10 10 0
-  s <- Seurat:::RunModularityClusteringCpp(
+  s <- SeuratBasics:::RunModularityClusteringCpp(
     SNN = connections,
     modularityFunction = 1,
     resolution = 0.05,
@@ -89,7 +89,7 @@ test_that("Low Resolution", {
   )
   expect_equal(s, e1)
   # java -jar ModularityOptimizer.jar karate_club_network.txt outjava.txt 2 0.05 3 1 10 10 0
-  s2 <- Seurat:::RunModularityClusteringCpp(
+  s2 <- SeuratBasics:::RunModularityClusteringCpp(
     SNN = connections,
     modularityFunction = 2,
     resolution=0.05,
@@ -115,7 +115,7 @@ test_that("EdgeWeights", {
   c2[20, 4] <- 5.0
   c2[20, 1] <- 5.0
   # java -jar ModularityOptimizer.jar weighted_karate_club_network.txt outjava.txt  1 1.0 3 1 10 40 1
-  s2 <- Seurat:::RunModularityClusteringCpp(
+  s2 <- SeuratBasics:::RunModularityClusteringCpp(
     SNN = c2,
     modularityFunction = 1,
     resolution = 1.0,

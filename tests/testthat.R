@@ -1,4 +1,4 @@
 library(testthat)
-library(Seurat)
+library(SeuratBasics)
 
-test_check("Seurat")
+test_check("SeuratBasics")
