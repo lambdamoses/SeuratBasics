@@ -2,7 +2,7 @@
 % Please edit documentation in R/utilities.R
 \name{CollapseSpeciesExpressionMatrix}
 \alias{CollapseSpeciesExpressionMatrix}
-\title{Slim down a multi-species expression matrix, when only one species is primarily of interenst.}
+\title{Slim down a multi-species expression matrix, when only one species is primarily of interest.}
 \usage{
 CollapseSpeciesExpressionMatrix(
   object,
