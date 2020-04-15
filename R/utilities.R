@@ -1268,39 +1268,6 @@ Melt <- function(x) {
   ))
 }
 
-# Give hints for old paramters and their newer counterparts
-#
-# This is a non-exhaustive list. If your function isn't working properly based
-# on the parameters you give it, please read the documentation for your function
-#
-# @param param A vector of paramters to get hints for
-#
-# @return Parameter hints for the specified paramters
-#
-OldParamHints <- function(param) {
-  param.conversion <- c(
-    'raw.data' = 'counts',
-    'min.genes' = 'min.features',
-    'features.plot' = 'features',
-    'pc.genes' = 'features',
-    'do.print' = 'verbose',
-    'genes.print' = 'nfeatures.print',
-    'pcs.print' = 'ndims.print',
-    'pcs.use' = 'dims',
-    'reduction.use' = 'reduction',
-    'cells.use' = 'cells',
-    'do.balanced' = 'balanced',
-    'display.progress' = 'verbose',
-    'print.output' = 'verbose',
-    'dims.use' = 'dims',
-    'reduction.type' = 'reduction',
-    'y.log' = 'log',
-    'cols.use' = 'cols',
-    'assay.use' = 'assay'
-  )
-  return(param.conversion[param])
-}
-
 # Check the existence of a package
 #
 # @param ... Package names

@@ -1,6 +1,6 @@
 set.seed(42)
 
-pbmc.file <- system.file('extdata', 'pbmc_raw.txt', package = 'Seurat')
+pbmc.file <- system.file('extdata', 'pbmc_raw.txt', package = 'SeuratBasics')
 pbmc.test <- as(as.matrix(read.table(pbmc.file, sep = "\t", row.names = 1)), "dgCMatrix")
 
 meta.data <- data.frame(

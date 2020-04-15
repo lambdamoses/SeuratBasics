@@ -365,7 +365,7 @@ CellsByIdentities <- function(object, idents = NULL, cells = NULL) {
 #'
 #' @examples
 #' pbmc_raw <- read.table(
-#'   file = system.file('extdata', 'pbmc_raw.txt', package = 'Seurat'),
+#'   file = system.file('extdata', 'pbmc_raw.txt', package = 'SeuratBasics'),
 #'   as.is = TRUE
 #' )
 #' pbmc_rna <- CreateAssayObject(counts = pbmc_raw)
@@ -673,7 +673,7 @@ CreateDimReducObject <- function(
 #'
 #' @examples
 #' pbmc_raw <- read.table(
-#'   file = system.file('extdata', 'pbmc_raw.txt', package = 'Seurat'),
+#'   file = system.file('extdata', 'pbmc_raw.txt', package = 'SeuratBasics'),
 #'   as.is = TRUE
 #' )
 #' pbmc_small <- CreateSeuratObject(counts = pbmc_raw)
@@ -737,7 +737,7 @@ CreateSeuratObject <- function(
     active.assay = assay,
     active.ident = idents,
     project.name = project,
-    version = packageVersion(pkg = 'Seurat')
+    version = packageVersion(pkg = 'SeuratBasics')
   )
   object[['orig.ident']] <- idents
   # Calculate nCount and nFeature
@@ -1339,206 +1339,6 @@ TopCells <- function(object, dim = 1, ncells = 20, balanced = FALSE, ...) {
   ))
 }
 
-#' Update old Seurat object to accomodate new features
-#'
-#' Updates Seurat objects to new structure for storing data/calculations.
-#' For Seurat v3 objects, will validate object structure ensuring all keys and feature
-#' names are formed properly.
-#'
-#' @param object Seurat object
-#'
-#' @return Returns a Seurat object compatible with latest changes
-#'
-#' @importFrom utils packageVersion
-#' @importFrom methods .hasSlot new slotNames as
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' updated_seurat_object = UpdateSeuratObject(object = old_seurat_object)
-#' }
-#'
-UpdateSeuratObject <- function(object) {
-  if (.hasSlot(object, "version")) {
-    if (slot(object = object, name = 'version') >= package_version(x = "2.0.0") && slot(object = object, name = 'version') < package_version(x = '3.0.0')) {
-      # Run update
-      message("Updating from v2.X to v3.X")
-      seurat.version <- packageVersion(pkg = "Seurat")
-      new.assay <- UpdateAssay(old.assay = object, assay = "RNA")
-      assay.list <- list(new.assay)
-      names(x = assay.list) <- "RNA"
-      for (i in names(x = object@assay)) {
-        assay.list[[i]] <- UpdateAssay(old.assay = object@assay[[i]], assay = i)
-      }
-      new.dr <- UpdateDimReduction(old.dr = object@dr, assay = "RNA")
-      object <- new(
-        Class = "Seurat",
-        version = seurat.version,
-        assays = assay.list,
-        active.assay = "RNA",
-        project.name = object@project.name,
-        misc = object@misc %||% list(),
-        active.ident = object@ident,
-        reductions = new.dr,
-        meta.data = object@meta.data,
-        tools = list()
-      )
-      # Run CalcN
-      for (assay in Assays(object = object)) {
-        n.calc <- CalcN(object = object[[assay]])
-        if (!is.null(x = n.calc)) {
-          names(x = n.calc) <- paste(names(x = n.calc), assay, sep = '_')
-          object[[names(x = n.calc)]] <- n.calc
-        }
-        to.remove <- c("nGene", "nUMI")
-        for (i in to.remove) {
-          if (i %in% colnames(x = object[[]])) {
-            object[[i]] <- NULL
-          }
-        }
-      }
-    }
-    if (package_version(x = slot(object = object, name = 'version')) >= package_version(x = "3.0.0")) {
-      # Run validation
-      message("Validating object structure")
-      # Update object slots
-      message("Updating object slots")
-      object <- UpdateSlots(object = object)
-      # Rename assays
-      assays <- make.names(names = Assays(object = object))
-      names(x = assays) <- Assays(object = object)
-      object <- do.call(what = RenameAssays, args = c('object' = object, assays))
-      for (obj in FilterObjects(object = object, classes.keep = c('Assay', 'DimReduc', 'Graph'))) {
-        suppressWarnings(expr = object[[obj]] <- UpdateSlots(object = object[[obj]]))
-      }
-      for (cmd in Command(object = object)) {
-        slot(object = object, name = 'commands')[[cmd]] <- UpdateSlots(
-          object = Command(object = object, command = cmd)
-        )
-      }
-      # Validate object keys
-      message("Ensuring keys are in the proper strucutre")
-      for (ko in FilterObjects(object = object)) {
-        Key(object = object[[ko]]) <- UpdateKey(key = Key(object = object[[ko]]))
-      }
-      # Check feature names
-      message("Ensuring feature names don't have underscores or pipes")
-      for (assay.name in FilterObjects(object = object, classes.keep = 'Assay')) {
-        assay <- object[[assay.name]]
-        for (slot in c('counts', 'data', 'scale.data')) {
-          if (!IsMatrixEmpty(x = slot(object = assay, name = slot))) {
-            rownames(x = slot(object = assay, name = slot)) <- gsub(
-              pattern = '_',
-              replacement = '-',
-              x = rownames(x = slot(object = assay, name = slot))
-            )
-            rownames(x = slot(object = assay, name = slot)) <- gsub(
-              pattern = '|',
-              replacement = '-',
-              x = rownames(x = slot(object = assay, name = slot)),
-              fixed = TRUE
-            )
-          }
-        }
-        VariableFeatures(object = assay) <- gsub(
-          pattern = '_',
-          replacement = '-',
-          x = VariableFeatures(object = assay)
-        )
-        VariableFeatures(object = assay) <- gsub(
-          pattern = '|',
-          replacement = '-',
-          x = VariableFeatures(object = assay),
-          fixed = TRUE
-        )
-        rownames(x = slot(object = assay, name = "meta.features")) <-  gsub(
-          pattern = '_',
-          replacement = '-',
-          x = rownames(x = assay[[]])
-        )
-        rownames(x = slot(object = assay, name = "meta.features")) <-  gsub(
-          pattern = '|',
-          replacement = '-',
-          x = rownames(x = assay[[]]),
-          fixed = TRUE
-        )
-        object[[assay.name]] <- assay
-      }
-      for (reduc.name in FilterObjects(object = object, classes.keep = 'DimReduc')) {
-        reduc <- object[[reduc.name]]
-        for (slot in c('feature.loadings', 'feature.loadings.projected')) {
-          if (!IsMatrixEmpty(x = slot(object = reduc, name = slot))) {
-            rownames(x = slot(object = reduc, name = slot)) <- gsub(
-              pattern = '_',
-              replacement = '-',
-              x = rownames(x = slot(object = reduc, name = slot))
-            )
-            rownames(x = slot(object = reduc, name = slot)) <- gsub(
-              pattern = '_',
-              replacement = '-',
-              x = rownames(x = slot(object = reduc, name = slot)),
-              fixed = TRUE
-            )
-          }
-        }
-        object[[reduc.name]] <- reduc
-      }
-    }
-    if (package_version(x = slot(object = object, name = 'version')) <= package_version(x = '3.1.1')) {
-      # Update Assays, DimReducs, and Graphs
-      for (x in names(x = object)) {
-        message("Updating slots in ", x)
-        xobj <- object[[x]]
-        xobj <- UpdateSlots(object = xobj)
-        if (inherits(x = xobj, what = 'DimReduc')) {
-          if (any(sapply(X = c('tsne', 'umap'), FUN = grepl, x = tolower(x = x)))) {
-            message("Setting ", x, " DimReduc to global")
-            slot(object = xobj, name = 'global') <- TRUE
-          }
-        } else if (inherits(x = xobj, what = 'Graph')) {
-          graph.assay <- unlist(x = strsplit(x = x, split = '_'))[1]
-          if (graph.assay %in% Assays(object = object)) {
-            message("Setting default assay of ", x, " to ", graph.assay)
-            DefaultAssay(object = xobj) <- graph.assay
-          }
-        }
-        object[[x]] <- xobj
-      }
-      # Update SeuratCommands
-      for (cmd in Command(object = object)) {
-        cobj <- Command(object = object, command = cmd)
-        cobj <- UpdateSlots(object = cobj)
-        cmd.assay <- unlist(x = strsplit(x = cmd, split = '\\.'))
-        cmd.assay <- cmd.assay[length(x = cmd.assay)]
-        cmd.assay <- if (cmd.assay %in% Assays(object = object)) {
-          cmd.assay
-        } else if (cmd.assay %in% Reductions(object = object)) {
-          DefaultAssay(object = object[[cmd.assay]])
-        } else {
-          NULL
-        }
-        if (is.null(x = cmd.assay)) {
-          message("No assay information could be found for ", cmd)
-        } else {
-          message("Setting assay used for ", cmd, " to ", cmd.assay)
-        }
-        slot(object = cobj, name = 'assay.used') <- cmd.assay
-        object[[cmd]] <- cobj
-      }
-      # Update object version
-      slot(object = object, name = 'version') <- packageVersion(pkg = 'Seurat')
-    }
-    message("Object representation is consistent with the most current Seurat version")
-    return(object)
-  }
-  stop(
-    "We are unable to convert Seurat objects less than version 2.X to version 3.X\n",
-    'Please use devtools::install_version to install Seurat v2.3.4 and update your object to a 2.X object',
-    call. = FALSE
-  )
-}
-
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Methods for Seurat-defined generics
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1898,7 +1698,7 @@ as.Seurat.CellDataSet <- function(
       Class = 'Seurat',
       assays = assays,
       meta.data = meta.data,
-      version = packageVersion(pkg = 'Seurat'),
+      version = packageVersion(pkg = 'SeuratBasics'),
       project.name = 'SeuratProject'
     )
     DefaultAssay(object = object) <- assay
@@ -2088,7 +1888,7 @@ as.Seurat.loom <- function(
       Class = 'Seurat',
       assays = assays,
       meta.data = data.frame(row.names = colnames(x = assays[[assay]])),
-      version = packageVersion(pkg = 'Seurat'),
+      version = packageVersion(pkg = 'SeuratBasics'),
       project.name = 'SeuratProject'
     )
     DefaultAssay(object = object) <- assay
@@ -2452,7 +2252,7 @@ as.Seurat.SingleCellExperiment <- function(
     Class = 'Seurat',
     assays = assays,
     meta.data = meta.data,
-    version = packageVersion(pkg = 'Seurat'),
+    version = packageVersion(pkg = 'SeuratBasics'),
     project.name = project
   )
   DefaultAssay(object = object) <- assay
@@ -3847,7 +3647,7 @@ ReadH5AD.H5File <- function(
     Class = 'Seurat',
     assays = assays,
     meta.data = obs,
-    version = packageVersion(pkg = 'Seurat'),
+    version = packageVersion(pkg = 'SeuratBasics'),
     project.name = project
   )
   # Set default assay and identity information
@@ -5736,7 +5536,7 @@ merge.Seurat <- function(
     active.assay = new.default.assay,
     active.ident = new.idents,
     project.name = project,
-    version = packageVersion(pkg = 'Seurat')
+    version = packageVersion(pkg = 'SeuratBasics')
   )
   return(merged.object)
 }
