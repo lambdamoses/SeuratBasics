@@ -28,7 +28,7 @@ calling this function.
 }
 \examples{
 pbmc_raw <- read.table(
-  file = system.file('extdata', 'pbmc_raw.txt', package = 'Seurat'),
+  file = system.file('extdata', 'pbmc_raw.txt', package = 'SeuratBasics'),
   as.is = TRUE
 )
 pbmc_rna <- CreateAssayObject(counts = pbmc_raw)

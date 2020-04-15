@@ -1038,16 +1038,6 @@ CheckDots <- function(..., fxns = NULL) {
         "silent" = NULL,
         stop("Invalid Seurat.checkdots option. Please choose one of warn, stop, silent")
       )
-      unused.hints <- sapply(X = unused, FUN = OldParamHints)
-      names(x = unused.hints) <- unused
-      unused.hints <- na.omit(object = unused.hints)
-      if (length(x = unused.hints) > 0) {
-        message(
-          "Suggested parameter: ",
-          paste(unused.hints, "instead of", names(x = unused.hints), collapse = '; '),
-          "\n"
-        )
-      }
     }
   }
 }
