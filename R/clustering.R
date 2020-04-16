@@ -602,14 +602,15 @@ RunLeiden <- function(
     )
   }
   #run leiden from leidenbase
-  partition <- leidenbase::leiden_find_partition(igraph = input,
-                                     initial_membership = initial.membership,
-                                     edge_weights = weights,
-                                     node_sizes = node.sizes,
-                                     resolution_parameter = resolution.parameter,
-                                     seed = random.seed, verbose = verbose,
-                                     partition_type = partition.type,
-                                     num_iter = n.iter)
+  p <- leidenbase::leiden_find_partition(igraph = input,
+                                         initial_membership = initial.membership,
+                                         edge_weights = weights,
+                                         node_sizes = node.sizes,
+                                         resolution_parameter = resolution.parameter,
+                                         seed = random.seed, verbose = verbose,
+                                         partition_type = partition.type,
+                                         num_iter = n.iter)
+  partition <- p$membership
   return(partition)
 }
 
