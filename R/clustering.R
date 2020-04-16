@@ -44,7 +44,7 @@ FindClusters.default <- function(
   algorithm = 1,
   n.start = 10,
   n.iter = 10,
-  random.seed = 0,
+  random.seed = 1,
   group.singletons = TRUE,
   temp.file.location = NULL,
   edge.file.name = NULL,
@@ -158,7 +158,7 @@ FindClusters.Seurat <- function(
   algorithm = 1,
   n.start = 10,
   n.iter = 10,
-  random.seed = 0,
+  random.seed = 1,
   group.singletons = TRUE,
   temp.file.location = NULL,
   edge.file.name = NULL,
@@ -574,7 +574,7 @@ RunLeiden <- function(
   weights = NULL,
   node.sizes = NULL,
   resolution.parameter = 1,
-  random.seed = 0,
+  random.seed = 1,
   n.iter = 10,
   verbose = TRUE
 ) {
@@ -638,7 +638,7 @@ RunModularityClustering <- function(
   algorithm = 1,
   n.start = 10,
   n.iter = 10,
-  random.seed = 0,
+  random.seed = 1,
   print.output = TRUE,
   temp.file.location = NULL,
   edge.file.name = NULL
