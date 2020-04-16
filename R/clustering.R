@@ -589,7 +589,7 @@ RunLeiden <- function(
     }
   } else if (inherits(x = object, what = c('dgCMatrix', 'matrix', "Matrix"))) {
     if (is.null(x = weights)) {
-      graph_from_adjacency_matrix(adjmatrix = object)
+      graph_from_adjacency_matrix(adjmatrix = ceiling(object))
     } else {
       graph_from_adjacency_matrix(adjmatrix = object, weighted = TRUE)
     }
